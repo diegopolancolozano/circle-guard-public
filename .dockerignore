@@ -1,0 +1,11 @@
+.git
+.gitignore
+.gradle
+**/build
+**/bin
+**/.idea
+**/.vscode
+**/node_modules
+**/dist
+**/out
+mobile/node_modules

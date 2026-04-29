@@ -1,0 +1,17 @@
+namespace: prod
+resources:
+  - ../../base
+
+images:
+  - name: TU_USUARIO_DOCKERHUB/circleguard-identity-service
+    newTag: prod
+  - name: TU_USUARIO_DOCKERHUB/circleguard-auth-service
+    newTag: prod
+  - name: TU_USUARIO_DOCKERHUB/circleguard-promotion-service
+    newTag: prod
+  - name: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
+    newTag: prod
+  - name: TU_USUARIO_DOCKERHUB/circleguard-dashboard-service
+    newTag: prod
+  - name: TU_USUARIO_DOCKERHUB/circleguard-file-service
+    newTag: prod

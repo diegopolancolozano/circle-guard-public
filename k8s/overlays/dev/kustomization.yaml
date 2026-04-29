@@ -1,0 +1,17 @@
+namespace: dev
+resources:
+  - ../../base
+
+images:
+  - name: TU_USUARIO_DOCKERHUB/circleguard-identity-service
+    newTag: dev
+  - name: TU_USUARIO_DOCKERHUB/circleguard-auth-service
+    newTag: dev
+  - name: TU_USUARIO_DOCKERHUB/circleguard-promotion-service
+    newTag: dev
+  - name: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
+    newTag: dev
+  - name: TU_USUARIO_DOCKERHUB/circleguard-dashboard-service
+    newTag: dev
+  - name: TU_USUARIO_DOCKERHUB/circleguard-file-service
+    newTag: dev

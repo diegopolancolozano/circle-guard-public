@@ -1,0 +1,17 @@
+namespace: stage
+resources:
+  - ../../base
+
+images:
+  - name: TU_USUARIO_DOCKERHUB/circleguard-identity-service
+    newTag: stage
+  - name: TU_USUARIO_DOCKERHUB/circleguard-auth-service
+    newTag: stage
+  - name: TU_USUARIO_DOCKERHUB/circleguard-promotion-service
+    newTag: stage
+  - name: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
+    newTag: stage
+  - name: TU_USUARIO_DOCKERHUB/circleguard-dashboard-service
+    newTag: stage
+  - name: TU_USUARIO_DOCKERHUB/circleguard-file-service
+    newTag: stage

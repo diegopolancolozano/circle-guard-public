@@ -1,0 +1,34 @@
+resources:
+  - services-deployments.yaml
+  - infra-deployments.yaml
+  - ../namespaces.yaml
+
+configMapGenerator:
+  - name: circleguard-config
+    literals:
+      - example=placeholder
+
+secretGenerator:
+  - name: qr-secret
+    literals:
+      - qr_secret=change-me
+
+images:
+  - name: TU_USUARIO_DOCKERHUB/circleguard-identity-service
+    newName: TU_USUARIO_DOCKERHUB/circleguard-identity-service
+    newTag: dev
+  - name: TU_USUARIO_DOCKERHUB/circleguard-auth-service
+    newName: TU_USUARIO_DOCKERHUB/circleguard-auth-service
+    newTag: dev
+  - name: TU_USUARIO_DOCKERHUB/circleguard-promotion-service
+    newName: TU_USUARIO_DOCKERHUB/circleguard-promotion-service
+    newTag: dev
+  - name: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
+    newName: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
+    newTag: dev
+  - name: TU_USUARIO_DOCKERHUB/circleguard-dashboard-service
+    newName: TU_USUARIO_DOCKERHUB/circleguard-dashboard-service
+    newTag: dev
+  - name: TU_USUARIO_DOCKERHUB/circleguard-file-service
+    newName: TU_USUARIO_DOCKERHUB/circleguard-file-service
+    newTag: dev

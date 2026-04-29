@@ -1,0 +1,202 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-identity-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-identity-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-identity-service
+    spec:
+      containers:
+        - name: identity
+          image: TU_USUARIO_DOCKERHUB/circleguard-identity-service:dev
+          ports:
+            - containerPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-identity-service
+spec:
+  selector:
+    app: circleguard-identity-service
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-auth-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-auth-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-auth-service
+    spec:
+      containers:
+        - name: auth
+          image: TU_USUARIO_DOCKERHUB/circleguard-auth-service:dev
+          ports:
+            - containerPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-auth-service
+spec:
+  selector:
+    app: circleguard-auth-service
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-promotion-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-promotion-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-promotion-service
+    spec:
+      containers:
+        - name: promotion
+          image: TU_USUARIO_DOCKERHUB/circleguard-promotion-service:dev
+          ports:
+            - containerPort: 8081
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-promotion-service
+spec:
+  selector:
+    app: circleguard-promotion-service
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 8081
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-gateway-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-gateway-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-gateway-service
+    spec:
+      containers:
+        - name: gateway
+          image: TU_USUARIO_DOCKERHUB/circleguard-gateway-service:dev
+          ports:
+            - containerPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-gateway-service
+spec:
+  selector:
+    app: circleguard-gateway-service
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-dashboard-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-dashboard-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-dashboard-service
+    spec:
+      containers:
+        - name: dashboard
+          image: TU_USUARIO_DOCKERHUB/circleguard-dashboard-service:dev
+          ports:
+            - containerPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-dashboard-service
+spec:
+  selector:
+    app: circleguard-dashboard-service
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-file-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-file-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-file-service
+    spec:
+      containers:
+        - name: file
+          image: TU_USUARIO_DOCKERHUB/circleguard-file-service:dev
+          ports:
+            - containerPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-file-service
+spec:
+  selector:
+    app: circleguard-file-service
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
