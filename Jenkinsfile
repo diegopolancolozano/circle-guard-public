@@ -11,6 +11,9 @@ pipeline {
         KUBECONFIG_CREDENTIALS_ID = "kubeconfig-credentials"
         QR_SECRET_CREDENTIALS_ID = "qr-secret-value"
         DOCKERHUB_EMAIL = "devops@circleguard.local"
+        GCP_PROJECT = ""
+        GKE_CLUSTER_NAME = ""
+        GKE_CLUSTER_LOCATION = ""
     }
 
     stages {
@@ -60,9 +63,14 @@ pipeline {
                 withCredentials([
                     usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD"),
                     file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG"),
-                    string(credentialsId: env.QR_SECRET_CREDENTIALS_ID, variable: "QR_SECRET")
+                    string(credentialsId: env.QR_SECRET_CREDENTIALS_ID, variable: "QR_SECRET"),
+                    // GCP service account JSON (Secret file in Jenkins credentials)
+                    file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')
                 ]) {
-                    sh "scripts/ci/terraform-bootstrap.sh"
+                    // Expose GCP vars to the script; configure them in the job (or as global env)
+                    withEnv(["GCP_PROJECT=${GCP_PROJECT}", "GKE_CLUSTER_NAME=${GKE_CLUSTER_NAME}", "GKE_CLUSTER_LOCATION=${GKE_CLUSTER_LOCATION}", "GCP_SA_FILE=${GCP_SA_FILE}"]) {
+                        sh "scripts/ci/terraform-bootstrap.sh"
+                    }
                 }
             }
         }
