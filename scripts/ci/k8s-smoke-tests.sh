@@ -25,12 +25,12 @@ function curl_get() {
 IDENTITY_CODE=$(curl_json "http://circleguard-identity-service:8080/api/v1/identities/map" '{"realIdentity":"smoke@circleguard.edu"}')
 PROMOTION_CODE=$(curl_json "http://circleguard-promotion-service:8081/api/v1/health/report" '{"anonymousId":"smoke-user","status":"CLEAR"}')
 GATEWAY_CODE=$(curl_json "http://circleguard-gateway-service:8080/api/v1/gate/validate" '{"token":"invalid"}')
-DASHBOARD_CODE=$(curl_get "http://circleguard-dashboard-service:8080/api/v1/analytics/health-board")
+FORM_CODE=$(curl_json "http://circleguard-form-service:8080/api/v1/surveys" '{"anonymousId":"550e8400-e29b-41d4-a716-446655440000","symptoms":["COUGH","FEVER"]}')
 
 kubectl -n "$ENVIRONMENT" delete pod "$POD_NAME" --ignore-not-found
 
-if [[ "$IDENTITY_CODE" != "200" || "$PROMOTION_CODE" != "200" || "$GATEWAY_CODE" != "200" || "$DASHBOARD_CODE" != "200" ]]; then
-  echo "Smoke tests failed: identity=${IDENTITY_CODE}, promotion=${PROMOTION_CODE}, gateway=${GATEWAY_CODE}, dashboard=${DASHBOARD_CODE}"
+if [[ "$IDENTITY_CODE" != "200" || "$PROMOTION_CODE" != "200" || "$GATEWAY_CODE" != "200" || "$FORM_CODE" != "200" ]]; then
+  echo "Smoke tests failed: identity=${IDENTITY_CODE}, promotion=${PROMOTION_CODE}, gateway=${GATEWAY_CODE}, form=${FORM_CODE}"
   exit 1
 fi
 

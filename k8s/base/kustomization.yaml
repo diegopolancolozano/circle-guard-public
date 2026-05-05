@@ -1,7 +1,6 @@
 resources:
   - services-deployments.yaml
   - infra-deployments.yaml
-  - ../namespaces.yaml
 
 configMapGenerator:
   - name: circleguard-config
@@ -26,9 +25,9 @@ images:
   - name: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
     newName: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
     newTag: dev
-  - name: TU_USUARIO_DOCKERHUB/circleguard-dashboard-service
-    newName: TU_USUARIO_DOCKERHUB/circleguard-dashboard-service
+  - name: TU_USUARIO_DOCKERHUB/circleguard-form-service
+    newName: TU_USUARIO_DOCKERHUB/circleguard-form-service
     newTag: dev
-  - name: TU_USUARIO_DOCKERHUB/circleguard-file-service
-    newName: TU_USUARIO_DOCKERHUB/circleguard-file-service
+  - name: TU_USUARIO_DOCKERHUB/circleguard-notification-service
+    newName: TU_USUARIO_DOCKERHUB/circleguard-notification-service
     newTag: dev

@@ -2,6 +2,17 @@
 
 This repository is prepared to run from Jenkins on a VM with Docker and Kubernetes access.
 
+## Selected microservices
+
+This Jenkins flow is focused on these six services:
+
+- `circleguard-auth-service`
+- `circleguard-identity-service`
+- `circleguard-promotion-service`
+- `circleguard-gateway-service`
+- `circleguard-form-service`
+- `circleguard-notification-service`
+
 ## Required Jenkins plugins
 
 - Pipeline
@@ -49,8 +60,8 @@ Use a Multibranch Pipeline job:
 
 ## What each branch does
 
-- `dev`: runs Terraform bootstrap, builds images and deploys to the `dev` namespace.
-- `stage`: runs Terraform bootstrap, builds images, deploys to `stage`, runs smoke tests, and archives `stage-evidence.txt`.
-- `main`: runs Terraform bootstrap, builds images, validates `stage`, runs E2E and Locust, deploys to `prod`, and generates release notes.
+- `dev`: runs Terraform bootstrap, builds the six selected services, and deploys to the `dev` namespace.
+- `stage`: runs Terraform bootstrap, builds the six selected services, deploys to `stage`, runs smoke tests, and archives `stage-evidence.txt`.
+- `main`: runs Terraform bootstrap, builds the six selected services, validates `stage`, runs E2E and Locust, deploys to `prod`, and generates release notes.
 
 For a copy-paste checklist, see [docs/JENKINS_CHECKLIST.md](JENKINS_CHECKLIST.md).

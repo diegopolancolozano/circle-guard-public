@@ -137,20 +137,20 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: circleguard-dashboard-service
+  name: circleguard-form-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: circleguard-dashboard-service
+      app: circleguard-form-service
   template:
     metadata:
       labels:
-        app: circleguard-dashboard-service
+        app: circleguard-form-service
     spec:
       containers:
-        - name: dashboard
-          image: TU_USUARIO_DOCKERHUB/circleguard-dashboard-service:dev
+        - name: form
+          image: TU_USUARIO_DOCKERHUB/circleguard-form-service:dev
           ports:
             - containerPort: 8080
 
@@ -158,10 +158,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: circleguard-dashboard-service
+  name: circleguard-form-service
 spec:
   selector:
-    app: circleguard-dashboard-service
+    app: circleguard-form-service
   ports:
     - protocol: TCP
       port: 8080
@@ -171,32 +171,32 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: circleguard-file-service
+  name: circleguard-notification-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: circleguard-file-service
+      app: circleguard-notification-service
   template:
     metadata:
       labels:
-        app: circleguard-file-service
+        app: circleguard-notification-service
     spec:
       containers:
-        - name: file
-          image: TU_USUARIO_DOCKERHUB/circleguard-file-service:dev
+        - name: notification
+          image: TU_USUARIO_DOCKERHUB/circleguard-notification-service:dev
           ports:
-            - containerPort: 8080
+            - containerPort: 8082
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: circleguard-file-service
+  name: circleguard-notification-service
 spec:
   selector:
-    app: circleguard-file-service
+    app: circleguard-notification-service
   ports:
     - protocol: TCP
-      port: 8080
-      targetPort: 8080
+      port: 8082
+      targetPort: 8082

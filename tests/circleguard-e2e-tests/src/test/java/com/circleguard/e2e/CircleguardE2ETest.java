@@ -4,9 +4,6 @@ import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.*;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.UUID;
 
@@ -19,16 +16,14 @@ class CircleguardE2ETest {
     private String identityBaseUrl;
     private String promotionBaseUrl;
     private String gatewayBaseUrl;
-    private String fileBaseUrl;
-    private String dashboardBaseUrl;
+        private String formBaseUrl;
 
     @BeforeAll
     void setUp() {
         identityBaseUrl = requiredEnv("IDENTITY_BASE_URL");
         promotionBaseUrl = requiredEnv("PROMOTION_BASE_URL");
         gatewayBaseUrl = requiredEnv("GATEWAY_BASE_URL");
-        fileBaseUrl = requiredEnv("FILE_BASE_URL");
-        dashboardBaseUrl = requiredEnv("DASHBOARD_BASE_URL");
+        formBaseUrl = requiredEnv("FORM_BASE_URL");
 
         RestAssured.enableLoggingOfRequestAndResponseIfValidationFails();
     }
@@ -80,19 +75,19 @@ class CircleguardE2ETest {
     }
 
     @Test
-    void shouldUploadFile() throws Exception {
-        Path tempDir = Files.createTempDirectory("circleguard-e2e-");
-        Path tempFile = tempDir.resolve("circleguard-e2e.txt");
-        Files.writeString(tempFile, "circle-guard-e2e", StandardCharsets.UTF_8);
-
+    void shouldSubmitHealthSurvey() {
         given()
-                .baseUri(fileBaseUrl)
-                .multiPart("file", tempFile.toFile())
+                .baseUri(formBaseUrl)
+                .contentType(ContentType.JSON)
+                .body(Map.of(
+                        "anonymousId", UUID.randomUUID().toString(),
+                        "symptoms", java.util.List.of("COUGH", "FEVER")
+                ))
         .when()
-                .post("/api/v1/files/upload")
+                .post("/api/v1/surveys")
         .then()
                 .statusCode(200)
-                .body("filename", endsWith("_circleguard-e2e.txt"));
+                .body("id", notNullValue());
     }
 
     @Test
@@ -103,18 +98,6 @@ class CircleguardE2ETest {
                 .get("/api/v1/access-points/{id}", UUID.randomUUID())
         .then()
                 .statusCode(404);
-    }
-
-    @Test
-    void shouldExposeDashboardHealthBoard() {
-        given()
-                .baseUri(dashboardBaseUrl)
-                .accept(ContentType.JSON)
-        .when()
-                .get("/api/v1/analytics/health-board")
-        .then()
-                .statusCode(200)
-                .body("timestamp", notNullValue());
     }
 
     private static String requiredEnv(String key) {

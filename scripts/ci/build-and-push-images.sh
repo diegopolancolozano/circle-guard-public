@@ -13,8 +13,8 @@ SERVICES=(
   "circleguard-identity-service"
   "circleguard-promotion-service"
   "circleguard-gateway-service"
-  "circleguard-dashboard-service"
-  "circleguard-file-service"
+  "circleguard-form-service"
+  "circleguard-notification-service"
 )
 
 echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin

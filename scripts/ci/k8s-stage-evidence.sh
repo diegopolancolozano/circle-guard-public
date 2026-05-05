@@ -21,7 +21,7 @@ OUTPUT_FILE="${2:-stage-evidence.txt}"
   for deploy in \
     postgres redis neo4j zookeeper kafka openldap \
     circleguard-auth-service circleguard-identity-service circleguard-promotion-service \
-    circleguard-gateway-service circleguard-dashboard-service circleguard-file-service; do
+    circleguard-gateway-service circleguard-form-service circleguard-notification-service; do
     echo "deployment/${deploy}"
     kubectl -n "$ENVIRONMENT" rollout status "deployment/${deploy}" --timeout=180s
     echo

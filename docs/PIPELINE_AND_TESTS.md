@@ -12,6 +12,15 @@ This repository includes a Jenkins pipeline in [Jenkinsfile](Jenkinsfile) that r
 8. Run E2E tests and Locust performance tests for `main`.
 9. Generate `release-notes.md` from Conventional Commits.
 
+The CI flow is centered on these six microservices:
+
+- `circleguard-auth-service`
+- `circleguard-identity-service`
+- `circleguard-promotion-service`
+- `circleguard-gateway-service`
+- `circleguard-form-service`
+- `circleguard-notification-service`
+
 ## Terraform bootstrap
 
 Terraform files are in `infra/terraform`.
@@ -53,8 +62,7 @@ The E2E module reads these environment variables:
 - `IDENTITY_BASE_URL`
 - `PROMOTION_BASE_URL`
 - `GATEWAY_BASE_URL`
-- `FILE_BASE_URL`
-- `DASHBOARD_BASE_URL`
+- `FORM_BASE_URL`
 - `QR_SECRET`
 
 The Jenkins `main` branch flow already exports them through `scripts/ci/run-e2e-tests.sh`.

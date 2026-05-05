@@ -48,7 +48,7 @@ pipeline {
 
         stage("Build & Unit Tests") {
             steps {
-                sh "./gradlew :services:circleguard-auth-service:test :services:circleguard-identity-service:test :services:circleguard-promotion-service:test :services:circleguard-gateway-service:test :services:circleguard-dashboard-service:test :services:circleguard-file-service:test"
+                sh "./gradlew :services:circleguard-auth-service:test :services:circleguard-identity-service:test :services:circleguard-promotion-service:test :services:circleguard-gateway-service:test :services:circleguard-form-service:test :services:circleguard-notification-service:test"
             }
         }
 

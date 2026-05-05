@@ -11,7 +11,7 @@ images:
     newTag: stage
   - name: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
     newTag: stage
-  - name: TU_USUARIO_DOCKERHUB/circleguard-dashboard-service
+  - name: TU_USUARIO_DOCKERHUB/circleguard-form-service
     newTag: stage
-  - name: TU_USUARIO_DOCKERHUB/circleguard-file-service
+  - name: TU_USUARIO_DOCKERHUB/circleguard-notification-service
     newTag: stage
