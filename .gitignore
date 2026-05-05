@@ -46,3 +46,21 @@ web-build/
 *_data/
 pgdata/
 neo4jdata/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+!**/terraform.tfvars.example
+
+# Local credential exports
+kubeconfig-credentials.yaml
+
+infra/terraform/terraform.tfvars
+infra/terraform-gcp/terraform.tfvars

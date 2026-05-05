@@ -1,0 +1,6 @@
+kubeconfig_path    = "./kubeconfig-credentials.yaml"
+dockerhub_username = "TU_USUARIO_DOCKERHUB"
+dockerhub_password = "TU_TOKEN_DOCKERHUB"
+dockerhub_email    = "tu-correo@ejemplo.com"
+qr_secret          = "CAMBIA_ESTE_SECRET"
+# environments      = ["dev", "stage", "prod"]

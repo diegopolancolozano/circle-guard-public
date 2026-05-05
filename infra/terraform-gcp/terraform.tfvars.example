@@ -1,0 +1,26 @@
+project_id = "tu-proyecto-gcp"
+region     = "us-central1"
+zone       = "us-central1-a"
+
+# Genera una clave con: ssh-keygen -t ed25519 -f ~/.ssh/circleguard_gcp
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA..."
+ssh_user       = "deployer"
+
+# Restringe SSH a tu IP publica/32 para mayor seguridad
+allowed_ssh_cidrs = ["0.0.0.0/0"]
+
+# Puedes ajustar tamaños/tipos segun presupuesto
+machines = {
+  jenkins = {
+    machine_type    = "e2-standard-2"
+    disk_size_gb    = 40
+    tags            = ["ssh", "http", "jenkins"]
+    startup_profile = "jenkins"
+  }
+  runner = {
+    machine_type    = "e2-standard-2"
+    disk_size_gb    = 30
+    tags            = ["ssh", "runner"]
+    startup_profile = "runner"
+  }
+}

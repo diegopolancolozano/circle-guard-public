@@ -8,6 +8,8 @@ import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
 class AnalyticsServiceUnitTest {
@@ -21,7 +23,7 @@ class AnalyticsServiceUnitTest {
         r1.put("entry_count", 5L);
         rows.add(r1);
 
-        when(jdbc.queryForList(any(String.class), any())).thenReturn(rows);
+        doReturn(rows).when(jdbc).queryForList(anyString(), (Object[]) any());
 
         AnalyticsService svc = new AnalyticsService(jdbc);
         List<Map<String, Object>> result = svc.getEntryTrends(UUID.randomUUID());

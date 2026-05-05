@@ -8,6 +8,9 @@ pipeline {
     environment {
         DOCKER_IMAGE_PREFIX = "TU_USUARIO_DOCKERHUB/circleguard"
         DOCKER_CREDENTIALS_ID = "dockerhub-credentials"
+        KUBECONFIG_CREDENTIALS_ID = "kubeconfig-credentials"
+        QR_SECRET_CREDENTIALS_ID = "qr-secret-value"
+        DOCKERHUB_EMAIL = "devops@circleguard.local"
     }
 
     stages {
@@ -49,6 +52,21 @@ pipeline {
             }
         }
 
+        stage("Terraform Bootstrap K8s") {
+            when {
+                expression { return env.IMAGE_TAGS?.trim() }
+            }
+            steps {
+                withCredentials([
+                    usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD"),
+                    file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG"),
+                    string(credentialsId: env.QR_SECRET_CREDENTIALS_ID, variable: "QR_SECRET")
+                ]) {
+                    sh "scripts/ci/terraform-bootstrap.sh"
+                }
+            }
+        }
+
         stage("Build & Push Images") {
             when {
                 expression { return env.IMAGE_TAGS?.trim() }
@@ -65,7 +83,9 @@ pipeline {
                 branch "dev"
             }
             steps {
-                sh "scripts/ci/k8s-deploy.sh dev"
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    sh "scripts/ci/k8s-deploy.sh dev"
+                }
             }
         }
 
@@ -74,7 +94,9 @@ pipeline {
                 branch "stage"
             }
             steps {
-                sh "scripts/ci/k8s-deploy.sh stage"
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    sh "scripts/ci/k8s-deploy.sh stage"
+                }
             }
         }
 
@@ -83,7 +105,21 @@ pipeline {
                 branch "stage"
             }
             steps {
-                sh "scripts/ci/k8s-smoke-tests.sh stage"
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    sh "scripts/ci/k8s-smoke-tests.sh stage"
+                }
+            }
+        }
+
+        stage("Stage Evidence") {
+            when {
+                branch "stage"
+            }
+            steps {
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    sh "scripts/ci/k8s-stage-evidence.sh stage stage-evidence.txt"
+                    archiveArtifacts artifacts: "stage-evidence.txt", onlyIfSuccessful: true
+                }
             }
         }
 
@@ -92,7 +128,9 @@ pipeline {
                 branch "main"
             }
             steps {
-                sh "scripts/ci/k8s-deploy.sh stage"
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    sh "scripts/ci/k8s-deploy.sh stage"
+                }
             }
         }
 
@@ -101,7 +139,9 @@ pipeline {
                 branch "main"
             }
             steps {
-                sh "scripts/ci/run-e2e-tests.sh stage"
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    sh "scripts/ci/run-e2e-tests.sh stage"
+                }
             }
         }
 
@@ -110,7 +150,9 @@ pipeline {
                 branch "main"
             }
             steps {
-                sh "scripts/ci/run-locust.sh stage"
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    sh "scripts/ci/run-locust.sh stage"
+                }
             }
         }
 
@@ -119,7 +161,9 @@ pipeline {
                 branch "main"
             }
             steps {
-                sh "scripts/ci/k8s-deploy.sh prod"
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    sh "scripts/ci/k8s-deploy.sh prod"
+                }
             }
         }
 

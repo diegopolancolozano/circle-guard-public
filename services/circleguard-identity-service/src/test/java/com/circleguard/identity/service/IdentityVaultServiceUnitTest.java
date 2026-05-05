@@ -5,6 +5,7 @@ import com.circleguard.identity.repository.IdentityMappingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -47,7 +48,11 @@ class IdentityVaultServiceUnitTest {
     void whenMappingMissing_thenCreateAndReturnNewAnonymousId() {
         String real = "new-user";
         when(repository.findByIdentityHash(anyString())).thenReturn(Optional.empty());
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any())).thenAnswer(invocation -> {
+            IdentityMapping mapping = invocation.getArgument(0);
+            ReflectionTestUtils.setField(mapping, "anonymousId", UUID.randomUUID());
+            return mapping;
+        });
 
         UUID result = service.getOrCreateAnonymousId(real);
 

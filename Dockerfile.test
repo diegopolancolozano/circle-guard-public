@@ -1,0 +1,5 @@
+FROM eclipse-temurin:21-jdk
+WORKDIR /workspace
+COPY . /workspace
+RUN chmod +x ./gradlew || true
+CMD ["./gradlew", "test", "--no-daemon", "--parallel"]

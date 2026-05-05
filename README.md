@@ -146,8 +146,13 @@ We maintain high system integrity via multi-level testing:
 |:---|:---|
 | `./gradlew test` | Full system suite (Unit + Integration) |
 | `./gradlew :services:<name>:test` | Single service testing |
+| `docker compose -f docker-compose.test.yml up --abort-on-container-exit --remove-orphans --build` | Run the test environment in Docker on a VM |
 
 **Note**: Integration tests use **Testcontainers** to spawn ephemeral Neo4j and PostgreSQL instances for zero-side-effect validation.
+
+For the Jenkins flow and VM Docker commands, see [docs/PIPELINE_AND_TESTS.md](docs/PIPELINE_AND_TESTS.md).
+For Jenkins installation and credentials, see [docs/JENKINS_SETUP.md](docs/JENKINS_SETUP.md).
+For full VM provisioning on GCP with Terraform, see [docs/GCP_TERRAFORM_SETUP.md](docs/GCP_TERRAFORM_SETUP.md).
 
 ---
 

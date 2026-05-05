@@ -1,13 +1,12 @@
 package com.circleguard.promotion.service;
 
+import com.circleguard.promotion.model.AccessPoint;
+import com.circleguard.promotion.repository.AccessPointRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
-
-import java.util.Set;
 
 import static org.mockito.Mockito.*;
 
@@ -41,7 +40,7 @@ class LocationResolutionServiceUnitTest {
     @Test
     void whenSessionMissing_thenMonitorOnly() {
         AccessPoint ap = new AccessPoint();
-        ap.setId("loc1");
+        ap.setId(java.util.UUID.randomUUID());
         ap.setName("AP1");
         when(accessPointRepository.findByMacAddress("apmac")).thenReturn(java.util.Optional.of(ap));
         when(sessionRegistry.getAnonymousId("device-mac")).thenReturn(null);
