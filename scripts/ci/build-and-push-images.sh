@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TAGS_RAW="${1:?tags required}"
-IMAGE_PREFIX="${2:?image prefix required}"
+IMAGE_PREFIX_TEMPLATE="${2:?image prefix required}"
 DOCKERHUB_USERNAME="${3:?docker username required}"
 DOCKERHUB_PASSWORD="${4:?docker password required}"
 
@@ -16,6 +16,16 @@ SERVICES=(
   "circleguard-form-service"
   "circleguard-notification-service"
 )
+
+# Keep the repository suffix from the configured prefix, but always push to the
+# authenticated DockerHub namespace. That avoids mismatches when Jenkins uses a
+# credential whose username differs from the hardcoded prefix in the pipeline.
+image_repository_suffix="${IMAGE_PREFIX_TEMPLATE#*/}"
+if [ -z "$image_repository_suffix" ] || [ "$image_repository_suffix" = "$IMAGE_PREFIX_TEMPLATE" ]; then
+  image_repository_suffix="circleguard"
+fi
+
+IMAGE_PREFIX="${DOCKERHUB_USERNAME}/${image_repository_suffix}"
 
 echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
