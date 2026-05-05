@@ -16,7 +16,6 @@ provider "kubernetes" {
   token = var.use_gke ? data.google_client_config.current.access_token : null
   cluster_ca_certificate = var.use_gke ? base64decode(data.google_container_cluster.cluster[0].master_auth[0].cluster_ca_certificate) : null
   config_path = var.use_gke ? null : var.kubeconfig_path
-  load_config_file = var.use_gke ? false : true
 }
 
 locals {
