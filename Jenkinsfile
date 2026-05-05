@@ -6,7 +6,7 @@ pipeline {
     }
 
     environment {
-        DOCKER_IMAGE_PREFIX = "TU_USUARIO_DOCKERHUB/circleguard"
+        DOCKER_IMAGE_PREFIX = "diegopolancolozano/circleguard"
         DOCKER_CREDENTIALS_ID = "dockerhub-credentials"
         KUBECONFIG_CREDENTIALS_ID = "kubeconfig-credentials"
         QR_SECRET_CREDENTIALS_ID = "qr-secret-value"
