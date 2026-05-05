@@ -1,0 +1,331 @@
+16:43:01  BUILD SUCCESSFUL in 2m 10s
+16:43:01  32 actionable tasks: 6 executed, 26 up-to-date
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Terraform Bootstrap K8s)
+[Pipeline] withCredentials
+16:43:03  Masking supported pattern matches of $DOCKERHUB_PASSWORD or $KUBECONFIG or $QR_SECRET or $GCP_SA_FILE
+[Pipeline] {
+[Pipeline] withCredentials
+16:43:04  Masking supported pattern matches of $DOCKERHUB_PASSWORD or $KUBECONFIG or $QR_SECRET or $GCP_SA_FILE
+[Pipeline] {
+[Pipeline] sh
+16:43:04  + scripts/ci/terraform-bootstrap.sh
+16:43:07  [0m[1mInitializing the backend...[0m
+16:43:08  [0m[1mInitializing provider plugins...[0m
+16:43:08  - Reusing previous version of hashicorp/kubernetes from the dependency lock file
+16:43:08  - Finding latest version of hashicorp/google...
+16:43:09  - Using previously-installed hashicorp/kubernetes v2.38.0
+16:43:09  - Installing hashicorp/google v7.31.0...
+16:43:15  - Installed hashicorp/google v7.31.0 (signed by HashiCorp)
+16:43:15  Terraform has made some changes to the provider dependency selections recorded
+16:43:15  in the .terraform.lock.hcl file. Review those changes and commit them to your
+16:43:15  version control system if they represent changes you intended to make.
+16:43:15  
+16:43:15  [0m[1m[32mTerraform has been successfully initialized![0m[32m[0m
+16:43:15  [0m[32m
+16:43:15  You may now begin working with Terraform. Try running "terraform plan" to see
+16:43:15  any changes that are required for your infrastructure. All Terraform commands
+16:43:15  should now work.
+16:43:15  
+16:43:15  If you ever set or change modules or backend configuration for Terraform,
+16:43:15  rerun this command to reinitialize your working directory. If you forget, other
+16:43:15  commands will detect it and remind you to do so if necessary.[0m
+16:43:25  [0m[1mdata.google_client_config.current: Reading...[0m[0m
+16:43:25  [0m[1mdata.google_container_cluster.cluster[0]: Reading...[0m[0m
+16:43:25  [0m[1mdata.google_client_config.current: Read complete after 0s [id=projects//regions//zones/][0m
+16:43:25  [0m[1mdata.google_container_cluster.cluster[0]: Read complete after 1s [id=projects/1026376319321/locations/us-central1/clusters/circle-guard-cluster][0m
+16:43:26  [0m[1mkubernetes_namespace_v1.env["dev"]: Refreshing state... [id=dev][0m
+16:43:26  [0m[1mkubernetes_namespace_v1.env["stage"]: Refreshing state... [id=stage][0m
+16:43:26  [0m[1mkubernetes_namespace_v1.env["prod"]: Refreshing state... [id=prod][0m
+16:43:26  [0m[1mkubernetes_secret_v1.dockerhub_pull_secret["stage"]: Refreshing state... [id=stage/dockerhub-pull-secret][0m
+16:43:26  [0m[1mkubernetes_secret_v1.dockerhub_pull_secret["prod"]: Refreshing state... [id=prod/dockerhub-pull-secret][0m
+16:43:26  [0m[1mkubernetes_secret_v1.dockerhub_pull_secret["dev"]: Refreshing state... [id=dev/dockerhub-pull-secret][0m
+16:43:26  [0m[1mkubernetes_secret_v1.qr_secret["stage"]: Refreshing state... [id=stage/qr-secret][0m
+16:43:26  [0m[1mkubernetes_secret_v1.qr_secret["prod"]: Refreshing state... [id=prod/qr-secret][0m
+16:43:26  [0m[1mkubernetes_secret_v1.qr_secret["dev"]: Refreshing state... [id=dev/qr-secret][0m
+16:43:27  
+16:43:27  [0m[1m[32mNo changes.[0m[1m Your infrastructure matches the configuration.[0m
+16:43:27  
+16:43:27  [0mTerraform has compared your real infrastructure against your configuration
+16:43:27  and found no differences, so no changes are needed.
+16:43:27  [0m[1m[32m
+16:43:27  Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
+16:43:27  [0m[0m[1m[32m
+16:43:27  Outputs:
+16:43:27  
+16:43:27  [0mmanaged_namespaces = tolist([
+16:43:27    "dev",
+16:43:27    "prod",
+16:43:27    "stage",
+16:43:27  ])
+16:43:28  Terraform bootstrap completed
+[Pipeline] }
+[Pipeline] // withCredentials
+[Pipeline] }
+[Pipeline] // withCredentials
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Build & Push Images)
+[Pipeline] withCredentials
+16:43:29  Masking supported pattern matches of $DOCKERHUB_PASSWORD
+[Pipeline] {
+[Pipeline] sh
+16:43:29  Warning: A secret was passed to "sh" using Groovy String interpolation, which is insecure.
+16:43:29  		 Affected argument(s) used the following variable(s): [DOCKERHUB_PASSWORD]
+16:43:29  		 See https://jenkins.io/redirect/groovy-string-interpolation for details.
+16:43:29  + scripts/ci/build-and-push-images.sh dev diegopolancolozano/circleguard diegoapolancol ****
+16:43:30  Login Succeeded
+16:43:30  Building diegoapolancol/circleguard-auth-service (dev)
+16:43:30  DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+16:43:30              Install the buildx component to build images with BuildKit:
+16:43:30              https://docs.docker.com/go/buildx/
+16:43:30  
+16:43:34  Sending build context to Docker daemon  183.9MB
+16:43:34  
+16:43:34  Step 1/10 : FROM eclipse-temurin:21-jdk AS build
+16:43:34   ---> e58e492628c1
+16:43:34  Step 2/10 : WORKDIR /workspace
+16:43:34   ---> Using cache
+16:43:34   ---> 76b062a2c658
+16:43:34  Step 3/10 : COPY . .
+16:44:30   ---> bed3082009ff
+16:44:30  Step 4/10 : RUN chmod +x gradlew
+16:44:30   ---> Running in 6d5bc4c914d8
+16:44:35   ---> Removed intermediate container 6d5bc4c914d8
+16:44:35   ---> c8a47124432a
+16:44:35  Step 5/10 : RUN ./gradlew :services:circleguard-auth-service:bootJar -x test
+16:44:35   ---> Running in ae1811f025ee
+16:44:37  [91mopenjdk version "21.0.10" 2026-01-20 LTS
+16:44:37  [0m[91mOpenJDK Runtime Environment Temurin-21.0.10+7 (build 21.0.10+7-LTS)
+16:44:37  OpenJDK 64-Bit Server VM Temurin-21.0.10+7 (build 21.0.10+7-LTS, mixed mode, sharing)
+16:44:37  [0mDownloading https://services.gradle.org/distributions/gradle-8.14-bin.zip
+16:45:10  ...................................................................................................................................
+16:45:10  Unzipping /root/.gradle/wrapper/dists/gradle-8.14-bin/38aieal9i53h9rfe7vjup95b9/gradle-8.14-bin.zip to /root/.gradle/wrapper/dists/gradle-8.14-bin/38aieal9i53h9rfe7vjup95b9
+16:45:15  Set executable permissions for: /root/.gradle/wrapper/dists/gradle-8.14-bin/38aieal9i53h9rfe7vjup95b9/gradle-8.14/bin/gradle
+16:45:19  
+16:45:19  Welcome to Gradle 8.14!
+16:45:19  
+16:45:19  Here are the highlights of this release:
+16:45:19   - Java 24 support
+16:45:19   - GraalVM Native Image toolchain selection
+16:45:19   - Enhancements to test reporting
+16:45:19   - Build Authoring improvements
+16:45:19  
+16:45:19  For more details see https://docs.gradle.org/8.14/release-notes.html
+16:45:19  
+16:45:20  Starting a Gradle Daemon (subsequent builds will be faster)
+16:51:57  > Task :services:circleguard-auth-service:checkKotlinGradlePluginConfigurationErrors
+16:52:23  > Task :services:circleguard-auth-service:compileKotlin
+16:53:19  > Task :services:circleguard-auth-service:compileKotlin NO-SOURCE
+16:53:41  > Task :services:circleguard-auth-service:compileJava
+16:53:48  > Task :services:circleguard-auth-service:processResources
+16:53:48  > Task :services:circleguard-auth-service:classes
+16:53:48  > Task :services:circleguard-auth-service:resolveMainClassName
+16:53:56  > Task :services:circleguard-auth-service:bootJar
+16:53:56  
+16:53:56  [Incubating] Problems report is available at: file:///workspace/build/reports/problems/problems-report.html
+16:53:56  
+16:53:56  Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+16:53:56  
+16:53:56  You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+16:53:56  
+16:53:56  For more on this, please refer to https://docs.gradle.org/8.14/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+16:53:56  
+16:53:56  BUILD SUCCESSFUL in 9m 17s
+16:53:56  5 actionable tasks: 5 executed
+16:56:02   ---> Removed intermediate container ae1811f025ee
+16:56:02   ---> d98237940dda
+16:56:02  Step 6/10 : FROM eclipse-temurin:21-jre
+16:56:02   ---> ff65ff0d43c7
+16:56:02  Step 7/10 : WORKDIR /app
+16:56:02   ---> Using cache
+16:56:02   ---> b0cd1d126a6a
+16:56:02  Step 8/10 : COPY --from=build /workspace/services/circleguard-auth-service/build/libs/*.jar app.jar
+16:56:02   ---> 6f64f9a1a20d
+16:56:02  Step 9/10 : EXPOSE 8080
+16:56:02   ---> Running in 7e181161bec3
+16:56:02   ---> Removed intermediate container 7e181161bec3
+16:56:02   ---> 00b1568d4cb7
+16:56:02  Step 10/10 : ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+16:56:02   ---> Running in 424099106ae2
+16:56:02   ---> Removed intermediate container 424099106ae2
+16:56:02   ---> 3dc32d78e695
+16:56:02  Successfully built 3dc32d78e695
+16:56:02  Successfully tagged diegoapolancol/circleguard-auth-service:dev
+16:56:02  Pushing diegoapolancol/circleguard-auth-service:dev
+16:56:02  The push refers to repository [docker.io/diegoapolancol/circleguard-auth-service]
+16:56:02  69b3abe8e6bc: Waiting
+16:56:06  69b3abe8e6bc: Waiting
+16:56:06  8a89ec8f5419: Waiting
+16:56:06  69b3abe8e6bc: Waiting
+16:56:06  8a89ec8f5419: Layer already exists
+16:56:06  b40150c1c271: Layer already exists
+16:56:06  69b3abe8e6bc: Waiting
+17:11:12  69b3abe8e6bc: Pushed
+17:11:12  dev: digest: sha256:3dc32d78e69530d2a5136f0c12018c9388a462715535fe8219d4e53f91f4c0ff size: 1837
+17:11:12  Building diegoapolancol/circleguard-identity-service (dev)
+17:11:12  DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+17:11:12              Install the buildx component to build images with BuildKit:
+17:11:12              https://docs.docker.com/go/buildx/
+17:11:12  
+17:11:12  Sending build context to Docker daemon  183.9MB
+17:11:12  
+17:11:12  Step 1/10 : FROM eclipse-temurin:21-jdk AS build
+17:11:12   ---> e58e492628c1
+17:11:12  Step 2/10 : WORKDIR /workspace
+17:11:12   ---> Using cache
+17:11:12   ---> 76b062a2c658
+17:11:12  Step 3/10 : COPY . .
+17:11:12   ---> Using cache
+17:11:12   ---> bed3082009ff
+17:11:12  Step 4/10 : RUN chmod +x gradlew
+17:11:12   ---> Using cache
+17:11:12   ---> c8a47124432a
+17:11:12  Step 5/10 : RUN ./gradlew :services:circleguard-identity-service:bootJar -x test
+17:11:12   ---> Running in b950e1363a63
+17:11:13  [91mopenjdk version "21.0.10" 2026-01-20 LTS
+17:11:13  [0m[91mOpenJDK Runtime Environment Temurin-21.0.10+7 (build 21.0.10+7-LTS)
+17:11:13  [0m[91mOpenJDK 64-Bit Server VM Temurin-21.0.10+7 (build 21.0.10+7-LTS, mixed mode, sharing)
+17:11:13  [0mDownloading https://services.gradle.org/distributions/gradle-8.14-bin.zip
+17:11:18  ...................................................................................................................................
+17:11:18  Unzipping /root/.gradle/wrapper/dists/gradle-8.14-bin/38aieal9i53h9rfe7vjup95b9/gradle-8.14-bin.zip to /root/.gradle/wrapper/dists/gradle-8.14-bin/38aieal9i53h9rfe7vjup95b9
+17:11:19  Set executable permissions for: /root/.gradle/wrapper/dists/gradle-8.14-bin/38aieal9i53h9rfe7vjup95b9/gradle-8.14/bin/gradle
+17:11:20  
+17:11:20  Welcome to Gradle 8.14!
+17:11:20  
+17:11:20  Here are the highlights of this release:
+17:11:20   - Java 24 support
+17:11:20   - GraalVM Native Image toolchain selection
+17:11:20   - Enhancements to test reporting
+17:11:20   - Build Authoring improvements
+17:11:20  
+17:11:20  For more details see https://docs.gradle.org/8.14/release-notes.html
+17:11:20  
+17:11:21  Starting a Gradle Daemon (subsequent builds will be faster)
+17:15:42  > Task :services:circleguard-identity-service:checkKotlinGradlePluginConfigurationErrors
+17:15:52  > Task :services:circleguard-identity-service:compileKotlin NO-SOURCE
+17:16:24  > Task :services:circleguard-identity-service:compileJava
+17:18:00  > Task :services:circleguard-identity-service:processResources
+17:18:00  > Task :services:circleguard-identity-service:classes
+17:18:00  > Task :services:circleguard-identity-service:resolveMainClassName
+17:18:04  > Task :services:circleguard-identity-service:bootJar
+17:18:04  
+17:18:04  [Incubating] Problems report is available at: file:///workspace/build/reports/problems/problems-report.html
+17:18:04  
+17:18:04  Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+17:18:04  
+17:18:04  You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+17:18:04  
+17:18:04  For more on this, please refer to https://docs.gradle.org/8.14/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+17:18:04  
+17:18:04  BUILD SUCCESSFUL in 6m 51s
+17:18:04  5 actionable tasks: 5 executed
+17:20:11   ---> Removed intermediate container b950e1363a63
+17:20:11   ---> 27d60c70f27a
+17:20:11  Step 6/10 : FROM eclipse-temurin:21-jre
+17:20:11   ---> ff65ff0d43c7
+17:20:11  Step 7/10 : WORKDIR /app
+17:20:11   ---> Using cache
+17:20:11   ---> b0cd1d126a6a
+17:20:11  Step 8/10 : COPY --from=build /workspace/services/circleguard-identity-service/build/libs/*.jar app.jar
+17:20:11   ---> 8d58d7ab6ae6
+17:20:11  Step 9/10 : EXPOSE 8080
+17:20:11   ---> Running in b2f36bb219c0
+17:20:11   ---> Removed intermediate container b2f36bb219c0
+17:20:11   ---> 927737cbc505
+17:20:11  Step 10/10 : ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+17:20:11   ---> Running in 64394e15a921
+17:20:11   ---> Removed intermediate container 64394e15a921
+17:20:11   ---> 72941e0636ce
+17:20:11  Successfully built 72941e0636ce
+17:20:11  Successfully tagged diegoapolancol/circleguard-identity-service:dev
+17:20:11  Pushing diegoapolancol/circleguard-identity-service:dev
+17:20:11  The push refers to repository [docker.io/diegoapolancol/circleguard-identity-service]
+17:20:11  b40150c1c271: Waiting
+17:20:11  3c5d8083e928: Waiting
+17:20:11  ea035da72e5f: Waiting
+17:20:11  9b2757fd86f0: Waiting
+17:20:11  0655ec121469: Waiting
+17:20:11  8a89ec8f5419: Waiting
+17:20:11  b40150c1c271: Layer already exists
+17:20:11  166e3ac40fca: Waiting
+17:20:11  3c5d8083e928: Waiting
+17:20:11  ea035da72e5f: Layer already exists
+17:20:11  9b2757fd86f0: Layer already exists
+17:20:11  0655ec121469: Waiting
+17:20:11  8a89ec8f5419: Layer already exists
+17:20:11  166e3ac40fca: Layer already exists
+17:20:11  3c5d8083e928: Layer already exists
+17:20:32  scripts/ci/build-and-push-images.sh: line 44: 375038 Killed                  docker push "${image_base}:${tag}"
+[Pipeline] }
+[Pipeline] // withCredentials
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Deploy Dev)
+Stage "Deploy Dev" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Deploy Stage)
+Stage "Deploy Stage" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Stage Smoke Tests)
+Stage "Stage Smoke Tests" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Stage Evidence)
+Stage "Stage Evidence" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Deploy Stage For Main Validation)
+Stage "Deploy Stage For Main Validation" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Main E2E Tests)
+Stage "Main E2E Tests" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Main Performance Tests)
+Stage "Main Performance Tests" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Deploy Prod)
+Stage "Deploy Prod" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Generate Release Notes)
+Stage "Generate Release Notes" skipped due to earlier failure(s)
+[Pipeline] getContext
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // timestamps
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+ERROR: script returned exit code 137
+Finished: FAILURE

@@ -29,6 +29,16 @@ IMAGE_PREFIX="${DOCKERHUB_USERNAME}/${image_repository_suffix}"
 
 echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
+# Build all jars once to avoid recompiling inside each image build
+echo "Building all service jars..."
+./gradlew \
+  :services:circleguard-auth-service:bootJar \
+  :services:circleguard-identity-service:bootJar \
+  :services:circleguard-promotion-service:bootJar \
+  :services:circleguard-gateway-service:bootJar \
+  :services:circleguard-form-service:bootJar \
+  :services:circleguard-notification-service:bootJar -x test
+
 for service_dir in "${SERVICES[@]}"; do
   service_suffix="${service_dir#circleguard-}"
   image_base="${IMAGE_PREFIX}-${service_suffix}"
@@ -39,7 +49,8 @@ for service_dir in "${SERVICES[@]}"; do
   done
 
   echo "Building ${image_base} (${TAGS_RAW})"
-  docker build -f "services/${service_dir}/Dockerfile" "${build_tags[@]}" .
+  # Build with service directory as context so docker only sends needed files
+  docker build -f "services/${service_dir}/Dockerfile" "${build_tags[@]}" "services/${service_dir}"
 
   for tag in "${TAGS[@]}"; do
     echo "Pushing ${image_base}:${tag}"
