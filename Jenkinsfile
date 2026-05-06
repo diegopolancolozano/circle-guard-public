@@ -61,22 +61,21 @@ pipeline {
             }
             steps {
                 withCredentials([
-                    usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD"),
-                    file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG"),
-                    string(credentialsId: env.QR_SECRET_CREDENTIALS_ID, variable: "QR_SECRET"),
-                    // GCP service account JSON (Secret file in Jenkins credentials)
-                    file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')
+                usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID,
+                usernameVariable: "DOCKERHUB_USERNAME",
+                passwordVariable: "DOCKERHUB_PASSWORD"),
+
+                file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID,
+                variable: "KUBECONFIG"),
+
+                string(credentialsId: env.QR_SECRET_CREDENTIALS_ID,
+                variable: "QR_SECRET"),
+
+                file(credentialsId: 'gcp-sa-json',
+                variable: 'GCP_SA_FILE')
                 ]) {
-                    // Expose GCP vars to the script; configure them in the job (or as global env)
-                    withCredentials([
-                        usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD"),
-                        file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG"),
-                        string(credentialsId: env.QR_SECRET_CREDENTIALS_ID, variable: "QR_SECRET"),
-                        file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')
-                    ]) {
-                        sh "scripts/ci/terraform-bootstrap.sh"
-                    }
-                }
+                sh "scripts/ci/terraform-bootstrap.sh"
+            }
             }
         }
 
