@@ -40,18 +40,12 @@ data "kubernetes_namespace_v1" "env" {
   }
 }
 
-resource "kubernetes_secret_v1" "dockerhub_pull_secret" {
+data "kubernetes_secret_v1" "dockerhub_pull_secret" {
   for_each = var.environments
 
   metadata {
     name      = "dockerhub-pull-secret"
     namespace = data.kubernetes_namespace_v1.env[each.key].metadata[0].name
-  }
-
-  type = "kubernetes.io/dockerconfigjson"
-
-  data = {
-    ".dockerconfigjson" = local.dockerconfigjson
   }
 }
 
