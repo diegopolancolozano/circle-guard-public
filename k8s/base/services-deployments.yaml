@@ -17,6 +17,9 @@ spec:
           image: diegoapolancol/circleguard-identity-service:dev
           ports:
             - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: app-config
 
 ---
 apiVersion: v1
@@ -51,6 +54,9 @@ spec:
           image: diegoapolancol/circleguard-auth-service:dev
           ports:
             - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: app-config
 
 ---
 apiVersion: v1
@@ -85,6 +91,9 @@ spec:
           image: diegoapolancol/circleguard-promotion-service:dev
           ports:
             - containerPort: 8081
+          envFrom:
+            - secretRef:
+                name: app-config
 
 ---
 apiVersion: v1
@@ -119,6 +128,9 @@ spec:
           image: diegoapolancol/circleguard-gateway-service:dev
           ports:
             - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: app-config
 
 ---
 apiVersion: v1
@@ -153,6 +165,9 @@ spec:
           image: diegoapolancol/circleguard-form-service:dev
           ports:
             - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: app-config
 
 ---
 apiVersion: v1
@@ -187,6 +202,9 @@ spec:
           image: diegoapolancol/circleguard-notification-service:dev
           ports:
             - containerPort: 8082
+          envFrom:
+            - secretRef:
+                name: app-config
 
 ---
 apiVersion: v1

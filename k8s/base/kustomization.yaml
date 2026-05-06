@@ -1,6 +1,7 @@
 resources:
   - services-deployments.yaml
   - infra-deployments.yaml
+  - app-config-secret.yaml
 
 configMapGenerator:
   - name: circleguard-config
