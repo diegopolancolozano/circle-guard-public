@@ -5,7 +5,7 @@ locals {
     "cloudresourcemanager.googleapis.com",
     "serviceusage.googleapis.com"
   ]
-
+//
   startup_profiles = {
     jenkins = <<-EOT
       #!/usr/bin/env bash
