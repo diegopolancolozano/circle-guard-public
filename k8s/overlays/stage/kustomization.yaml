@@ -3,15 +3,15 @@ resources:
   - ../../base
 
 images:
-  - name: TU_USUARIO_DOCKERHUB/circleguard-identity-service
+  - name: diegoapolancol/circleguard-identity-service
     newTag: stage
-  - name: TU_USUARIO_DOCKERHUB/circleguard-auth-service
+  - name: diegoapolancol/circleguard-auth-service
     newTag: stage
-  - name: TU_USUARIO_DOCKERHUB/circleguard-promotion-service
+  - name: diegoapolancol/circleguard-promotion-service
     newTag: stage
-  - name: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
+  - name: diegoapolancol/circleguard-gateway-service
     newTag: stage
-  - name: TU_USUARIO_DOCKERHUB/circleguard-form-service
+  - name: diegoapolancol/circleguard-form-service
     newTag: stage
-  - name: TU_USUARIO_DOCKERHUB/circleguard-notification-service
+  - name: diegoapolancol/circleguard-notification-service
     newTag: stage

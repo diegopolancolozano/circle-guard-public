@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: identity
-          image: TU_USUARIO_DOCKERHUB/circleguard-identity-service:dev
+          image: diegoapolancol/circleguard-identity-service:dev
           ports:
             - containerPort: 8080
 
@@ -48,7 +48,7 @@ spec:
     spec:
       containers:
         - name: auth
-          image: TU_USUARIO_DOCKERHUB/circleguard-auth-service:dev
+          image: diegoapolancol/circleguard-auth-service:dev
           ports:
             - containerPort: 8080
 
@@ -82,7 +82,7 @@ spec:
     spec:
       containers:
         - name: promotion
-          image: TU_USUARIO_DOCKERHUB/circleguard-promotion-service:dev
+          image: diegoapolancol/circleguard-promotion-service:dev
           ports:
             - containerPort: 8081
 
@@ -116,7 +116,7 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: TU_USUARIO_DOCKERHUB/circleguard-gateway-service:dev
+          image: diegoapolancol/circleguard-gateway-service:dev
           ports:
             - containerPort: 8080
 
@@ -150,7 +150,7 @@ spec:
     spec:
       containers:
         - name: form
-          image: TU_USUARIO_DOCKERHUB/circleguard-form-service:dev
+          image: diegoapolancol/circleguard-form-service:dev
           ports:
             - containerPort: 8080
 
@@ -184,7 +184,7 @@ spec:
     spec:
       containers:
         - name: notification
-          image: TU_USUARIO_DOCKERHUB/circleguard-notification-service:dev
+          image: diegoapolancol/circleguard-notification-service:dev
           ports:
             - containerPort: 8082
 
