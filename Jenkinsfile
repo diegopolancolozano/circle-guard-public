@@ -5,9 +5,7 @@ pipeline {
         timestamps()
     }
 
-    parameters {
-        booleanParam(name: 'TEARDOWN', defaultValue: false, description: 'Destroy ALL GCP infrastructure (VMs + GKE cluster)')
-    }
+    // No pipeline-level parameters to avoid prompting on job start.
 
     environment {
         DOCKER_IMAGE_PREFIX = "diegopolancolozano/circleguard"
@@ -203,10 +201,10 @@ pipeline {
         }
 
         stage("Teardown All Infrastructure") {
-            when {
-                expression { return params.TEARDOWN == true }
-            }
             steps {
+                script {
+                    input message: 'Destroy ALL GCP infrastructure (VMs + GKE cluster)? This is irreversible.', ok: 'Destroy'
+                }
                 withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
                     sh "scripts/ci/teardown-all.sh"
                 }
