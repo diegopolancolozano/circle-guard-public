@@ -3,8 +3,8 @@ set -euo pipefail
 
 ENVIRONMENT="${1:?environment required}"
 # Keep generous defaults because Spring services can take several minutes on cold start.
-INFRA_TIMEOUT="${INFRA_TIMEOUT:-420s}"
-SERVICE_TIMEOUT="${SERVICE_TIMEOUT:-420s}"
+INFRA_TIMEOUT="${INFRA_TIMEOUT:-600s}"
+SERVICE_TIMEOUT="${SERVICE_TIMEOUT:-600s}"
 
 wait_for_rollout() {
   local deploy="$1"
