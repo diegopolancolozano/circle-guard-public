@@ -5,6 +5,10 @@ pipeline {
         timestamps()
     }
 
+    parameters {
+        booleanParam(name: 'TEARDOWN', defaultValue: false, description: 'Destroy ALL GCP infrastructure (VMs + GKE cluster)')
+    }
+
     environment {
         DOCKER_IMAGE_PREFIX = "diegopolancolozano/circleguard"
         DOCKER_CREDENTIALS_ID = "dockerhub-credentials"
@@ -96,7 +100,8 @@ pipeline {
                 branch "dev"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
+                    sh "scripts/ci/ensure-gke-access.sh"
                     sh "scripts/ci/k8s-deploy.sh dev"
                 }
             }
@@ -107,7 +112,8 @@ pipeline {
                 branch "stage"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
+                    sh "scripts/ci/ensure-gke-access.sh"
                     sh "scripts/ci/k8s-deploy.sh stage"
                 }
             }
@@ -118,7 +124,8 @@ pipeline {
                 branch "stage"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
+                    sh "scripts/ci/ensure-gke-access.sh"
                     sh "scripts/ci/k8s-smoke-tests.sh stage"
                 }
             }
@@ -129,7 +136,8 @@ pipeline {
                 branch "stage"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
+                    sh "scripts/ci/ensure-gke-access.sh"
                     sh "scripts/ci/k8s-stage-evidence.sh stage stage-evidence.txt"
                     archiveArtifacts artifacts: "stage-evidence.txt", onlyIfSuccessful: true
                 }
@@ -141,7 +149,8 @@ pipeline {
                 branch "main"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
+                    sh "scripts/ci/ensure-gke-access.sh"
                     sh "scripts/ci/k8s-deploy.sh stage"
                 }
             }
@@ -152,7 +161,8 @@ pipeline {
                 branch "main"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
+                    sh "scripts/ci/ensure-gke-access.sh"
                     sh "scripts/ci/run-e2e-tests.sh stage"
                 }
             }
@@ -163,7 +173,8 @@ pipeline {
                 branch "main"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
+                    sh "scripts/ci/ensure-gke-access.sh"
                     sh "scripts/ci/run-locust.sh stage"
                 }
             }
@@ -174,7 +185,8 @@ pipeline {
                 branch "main"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
+                    sh "scripts/ci/ensure-gke-access.sh"
                     sh "scripts/ci/k8s-deploy.sh prod"
                 }
             }
@@ -187,6 +199,17 @@ pipeline {
             steps {
                 sh "scripts/ci/generate-release-notes.sh"
                 archiveArtifacts artifacts: "release-notes.md", onlyIfSuccessful: true
+            }
+        }
+
+        stage("Teardown All Infrastructure") {
+            when {
+                expression { return params.TEARDOWN == true }
+            }
+            steps {
+                withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
+                    sh "scripts/ci/teardown-all.sh"
+                }
             }
         }
     }
