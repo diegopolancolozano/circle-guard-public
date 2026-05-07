@@ -13,7 +13,7 @@ pipeline {
         QR_SECRET_CREDENTIALS_ID = "qr-secret-value"
         DOCKERHUB_EMAIL = "devops@circleguard.local"
         TEARDOWN = "false"
-        GCP_PROJECT = "1026376319321"
+        GCP_PROJECT = "ejemploingesoft"
         GKE_CLUSTER_NAME = "circle-guard-cluster"
         GKE_CLUSTER_LOCATION = "us-central1"
         USE_GKE_GCLOUD_AUTH_PLUGIN = "True"
