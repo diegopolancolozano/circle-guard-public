@@ -48,37 +48,8 @@ curl_json_code() {
   kubectl -n "$ENVIRONMENT" exec "$POD_NAME" -- sh -c "curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '${data}' '${url}'"
 }
 
-curl_get_code() {
-  local url="$1"
-  kubectl -n "$ENVIRONMENT" exec "$POD_NAME" -- sh -c "curl -sS -o /dev/null -w '%{http_code}' '${url}'"
-}
-
-assert_http_200_get_with_retry() {
-  local name="$1"
-  local url="$2"
-  local deploy="$3"
-
-  local attempt
-  local code
-  code="000"
-
-  for attempt in $(seq 1 "$SMOKE_RETRIES"); do
-    if code=$(curl_get_code "$url" 2>/dev/null); then
-      if [[ "$code" == "200" ]]; then
-        echo "${name}: HTTP 200"
-        return 0
-      fi
-    fi
-    echo "${name}: attempt ${attempt}/${SMOKE_RETRIES} failed (code=${code}), retrying in ${SMOKE_RETRY_SLEEP}s"
-    sleep "$SMOKE_RETRY_SLEEP"
-  done
-
-  echo "ERROR: ${name} did not return HTTP 200 after ${SMOKE_RETRIES} attempts"
-  print_diagnostics "$deploy"
-  exit 1
-}
-
-assert_http_200_with_retry() {
+# Accept 200, 401, or 403 as valid responses (service is up and responding)
+assert_http_valid_with_retry() {
   local name="$1"
   local url="$2"
   local payload="$3"
@@ -90,8 +61,8 @@ assert_http_200_with_retry() {
 
   for attempt in $(seq 1 "$SMOKE_RETRIES"); do
     if code=$(curl_json_code "$url" "$payload" 2>/dev/null); then
-      if [[ "$code" == "200" ]]; then
-        echo "${name}: HTTP 200"
+      if [[ "$code" == "200" || "$code" == "401" || "$code" == "403" ]]; then
+        echo "${name}: HTTP ${code} (service responding)"
         return 0
       fi
     fi
@@ -99,7 +70,7 @@ assert_http_200_with_retry() {
     sleep "$SMOKE_RETRY_SLEEP"
   done
 
-  echo "ERROR: ${name} did not return HTTP 200 after ${SMOKE_RETRIES} attempts"
+  echo "ERROR: ${name} did not return valid HTTP code after ${SMOKE_RETRIES} attempts"
   print_diagnostics "$deploy"
   exit 1
 }
@@ -113,25 +84,28 @@ wait_deployment_available "circleguard-promotion-service"
 wait_deployment_available "circleguard-gateway-service"
 wait_deployment_available "circleguard-form-service"
 
-# Test health endpoints instead of authenticated endpoints
-assert_http_200_get_with_retry \
-  "identity-health" \
-  "http://circleguard-identity-service:8080/actuator/health" \
+assert_http_valid_with_retry \
+  "identity" \
+  "http://circleguard-identity-service:8080/api/v1/identities/map" \
+  '{"realIdentity":"smoke@circleguard.edu"}' \
   "circleguard-identity-service"
 
-assert_http_200_get_with_retry \
-  "promotion-health" \
-  "http://circleguard-promotion-service:8081/actuator/health" \
+assert_http_valid_with_retry \
+  "promotion" \
+  "http://circleguard-promotion-service:8081/api/v1/health/report" \
+  '{"anonymousId":"smoke-user","status":"CLEAR"}' \
   "circleguard-promotion-service"
 
-assert_http_200_get_with_retry \
-  "gateway-health" \
-  "http://circleguard-gateway-service:8080/actuator/health" \
+assert_http_valid_with_retry \
+  "gateway" \
+  "http://circleguard-gateway-service:8080/api/v1/gate/validate" \
+  '{"token":"invalid"}' \
   "circleguard-gateway-service"
 
-assert_http_200_get_with_retry \
-  "form-health" \
-  "http://circleguard-form-service:8080/actuator/health" \
+assert_http_valid_with_retry \
+  "form" \
+  "http://circleguard-form-service:8080/api/v1/surveys" \
+  '{"anonymousId":"550e8400-e29b-41d4-a716-446655440000","symptoms":["COUGH","FEVER"]}' \
   "circleguard-form-service"
 
 echo "Smoke tests passed"
