@@ -56,7 +56,7 @@ pipeline {
             steps {
                 // Comentado para acelerar iteraciones: ejecutar solo build (bootJar) sin tests
                 // sh "./gradlew :services:circleguard-auth-service:test :services:circleguard-identity-service:test :services:circleguard-promotion-service:test :services:circleguard-gateway-service:test :services:circleguard-form-service:test :services:circleguard-notification-service:test"
-                sh "./gradlew :services:circleguard-auth-service:bootJar :services:circleguard-identity-service:bootJar :services:circleguard-promotion-service:bootJar :services:circleguard-gateway-service:bootJar :services:circleguard-form-service:bootJar :services:circleguard-notification-service:bootJar -x test"
+                sh "./gradlew clean :services:circleguard-auth-service:bootJar :services:circleguard-identity-service:bootJar :services:circleguard-promotion-service:bootJar :services:circleguard-gateway-service:bootJar :services:circleguard-form-service:bootJar :services:circleguard-notification-service:bootJar -x test"
             }
         }
 

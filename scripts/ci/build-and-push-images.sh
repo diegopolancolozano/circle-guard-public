@@ -24,7 +24,7 @@ echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-st
 
 # Build all jars once to avoid recompiling inside each image build
 echo "Building all service jars..."
-./gradlew \
+./gradlew clean \
   :services:circleguard-auth-service:bootJar \
   :services:circleguard-identity-service:bootJar \
   :services:circleguard-promotion-service:bootJar \
