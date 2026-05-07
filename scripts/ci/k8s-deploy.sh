@@ -4,25 +4,18 @@ set -euo pipefail
 ENVIRONMENT="${1:?environment required}"
 FORCE_REDEPLOY="${FORCE_REDEPLOY:-false}"
 
-kubectl apply -f k8s/namespaces.yaml --validate=false
+CURRENT_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
+CURRENT_SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
 
-# Create app-config secret with database connection strings
-kubectl create secret generic app-config \
-  --namespace="$ENVIRONMENT" \
-  --from-literal=SPRING_DATASOURCE_URL="jdbc:postgresql://postgres:5432/circleguard" \
-  --from-literal=SPRING_DATASOURCE_USERNAME="admin" \
-  --from-literal=SPRING_DATASOURCE_PASSWORD="password" \
-  --from-literal=SPRING_NEO4J_URI="bolt://neo4j:7687" \
-  --from-literal=SPRING_NEO4J_AUTHENTICATION_USERNAME="neo4j" \
-  --from-literal=SPRING_NEO4J_AUTHENTICATION_PASSWORD="password" \
-  --from-literal=SPRING_DATA_REDIS_HOST="redis" \
-  --from-literal=SPRING_DATA_REDIS_PORT="6379" \
-  --from-literal=SPRING_KAFKA_BOOTSTRAP_SERVERS="kafka:9092" \
-  --from-literal=LDAP_URL="ldap://openldap:389" \
-  --from-literal=LDAP_BASE="dc=circleguard,dc=edu" \
-  --from-literal=LDAP_USER_DN="cn=admin,dc=circleguard,dc=edu" \
-  --from-literal=LDAP_PASSWORD="admin" \
-  --dry-run=client -o yaml | kubectl apply -f - --validate=false
+echo "Using kube context: ${CURRENT_CONTEXT}"
+echo "Using kube server: ${CURRENT_SERVER}"
+
+if [[ "${CURRENT_CONTEXT}" == *"minikube"* ]] || [[ "${CURRENT_SERVER}" == *"192.168.49.2"* ]]; then
+  echo "ERROR: kubeconfig points to minikube. Update Jenkins credential 'kubeconfig-credentials' to the GKE kubeconfig."
+  exit 1
+fi
+
+kubectl apply -f k8s/namespaces.yaml --validate=false
 
 # Force redeploy if requested
 if [ "$FORCE_REDEPLOY" = "true" ]; then

@@ -26,6 +26,13 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -79,6 +86,13 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -132,6 +146,13 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -185,6 +206,13 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -238,6 +266,13 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -291,6 +326,13 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
