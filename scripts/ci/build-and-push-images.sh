@@ -17,15 +17,8 @@ SERVICES=(
   "circleguard-notification-service"
 )
 
-# Keep the repository suffix from the configured prefix, but always push to the
-# authenticated DockerHub namespace. That avoids mismatches when Jenkins uses a
-# credential whose username differs from the hardcoded prefix in the pipeline.
-image_repository_suffix="${IMAGE_PREFIX_TEMPLATE#*/}"
-if [ -z "$image_repository_suffix" ] || [ "$image_repository_suffix" = "$IMAGE_PREFIX_TEMPLATE" ]; then
-  image_repository_suffix="circleguard"
-fi
-
-IMAGE_PREFIX="${DOCKERHUB_USERNAME}/${image_repository_suffix}"
+# Use the configured image prefix as-is so CI pushes exactly where manifests pull.
+IMAGE_PREFIX="${IMAGE_PREFIX_TEMPLATE}"
 
 echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
