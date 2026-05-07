@@ -1,11 +1,10 @@
 pipeline {
     agent any
 
-    options {
-        timestamps()
-    }
 
-    // No pipeline-level parameters to avoid prompting on job start.
+    parameters {
+        booleanParam(name: 'TEARDOWN', defaultValue: false, description: 'Destroy ALL GCP infrastructure (VMs + GKE cluster)')
+    }
 
     environment {
         DOCKER_IMAGE_PREFIX = "diegopolancolozano/circleguard"
@@ -13,6 +12,7 @@ pipeline {
         KUBECONFIG_CREDENTIALS_ID = "kubeconfig-credentials"
         QR_SECRET_CREDENTIALS_ID = "qr-secret-value"
         DOCKERHUB_EMAIL = "devops@circleguard.local"
+        TEARDOWN = "false"
         GCP_PROJECT = "1026376319321"
         GKE_CLUSTER_NAME = "circle-guard-cluster"
         GKE_CLUSTER_LOCATION = "us-central1"
@@ -201,10 +201,10 @@ pipeline {
         }
 
         stage("Teardown All Infrastructure") {
+            when {
+                expression { return env.TEARDOWN == 'true' }
+            }
             steps {
-                script {
-                    input message: 'Destroy ALL GCP infrastructure (VMs + GKE cluster)? This is irreversible.', ok: 'Destroy'
-                }
                 withCredentials([file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')]) {
                     sh "scripts/ci/teardown-all.sh"
                 }
