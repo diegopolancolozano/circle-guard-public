@@ -4,6 +4,11 @@ metadata:
   name: circleguard-identity-service
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: circleguard-identity-service
@@ -12,6 +17,7 @@ spec:
       labels:
         app: circleguard-identity-service
     spec:
+      terminationGracePeriodSeconds: 30
       containers:
         - name: identity
           image: diegoapolancol/circleguard-identity-service:dev
