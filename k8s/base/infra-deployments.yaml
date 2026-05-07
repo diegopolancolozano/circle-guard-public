@@ -57,8 +57,22 @@ spec:
           env:
             - name: NEO4J_AUTH
               value: neo4j/password
+            - name: NEO4J_ACCEPT_LICENSE_AGREEMENT
+              value: "yes"
+            - name: NEO4J_server_memory_heap_initial__size
+              value: "512m"
+            - name: NEO4J_server_memory_heap_max__size
+              value: "512m"
           ports:
             - containerPort: 7687
+            - containerPort: 7474
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
 
 ---
 apiVersion: v1
@@ -161,8 +175,25 @@ spec:
               value: zookeeper:2181
             - name: KAFKA_BROKER_ID
               value: "1"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://kafka:9092
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: PLAINTEXT:PLAINTEXT
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: PLAINTEXT
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
           ports:
             - containerPort: 9092
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
 
 ---
 apiVersion: v1
