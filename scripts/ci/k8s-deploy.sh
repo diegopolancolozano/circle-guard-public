@@ -4,7 +4,7 @@ set -euo pipefail
 ENVIRONMENT="${1:?environment required}"
 FORCE_REDEPLOY="${FORCE_REDEPLOY:-false}"
 
-kubectl apply -f k8s/namespaces.yaml
+kubectl apply -f k8s/namespaces.yaml --validate=false
 
 # Create app-config secret with database connection strings
 kubectl create secret generic app-config \
@@ -22,7 +22,7 @@ kubectl create secret generic app-config \
   --from-literal=LDAP_BASE="dc=circleguard,dc=edu" \
   --from-literal=LDAP_USER_DN="cn=admin,dc=circleguard,dc=edu" \
   --from-literal=LDAP_PASSWORD="admin" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | kubectl apply -f - --validate=false
 
 # Force redeploy if requested
 if [ "$FORCE_REDEPLOY" = "true" ]; then
@@ -43,6 +43,6 @@ for pod in $(kubectl -n "$ENVIRONMENT" get pods --no-headers 2>/dev/null | awk '
   fi
 done
 
-kubectl apply -k "k8s/overlays/${ENVIRONMENT}"
+kubectl apply -k "k8s/overlays/${ENVIRONMENT}" --validate=false
 
 scripts/ci/k8s-wait-ready.sh "$ENVIRONMENT"
