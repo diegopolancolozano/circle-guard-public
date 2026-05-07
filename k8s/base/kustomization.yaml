@@ -2,16 +2,12 @@ resources:
   - services-deployments.yaml
   - infra-deployments.yaml
   - app-config-secret.yaml
+  - qr-secret.yaml
 
 configMapGenerator:
   - name: circleguard-config
     literals:
       - example=placeholder
-
-secretGenerator:
-  - name: qr-secret
-    literals:
-      - qr_secret=change-me-change-me-change-me-change-me
 
 images:
   - name: diegoapolancol/circleguard-identity-service
