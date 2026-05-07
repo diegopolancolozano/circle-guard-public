@@ -11,7 +11,7 @@ configMapGenerator:
 secretGenerator:
   - name: qr-secret
     literals:
-      - qr_secret=change-me
+      - qr_secret=change-me-change-me-change-me-change-me
 
 images:
   - name: diegoapolancol/circleguard-identity-service

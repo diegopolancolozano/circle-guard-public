@@ -88,6 +88,12 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          env:
+            - name: QR_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: qr-secret
+                  key: qr_secret
           startupProbe:
             httpGet:
               path: /actuator/health
@@ -210,6 +216,12 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          env:
+            - name: QR_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: qr-secret
+                  key: qr_secret
           startupProbe:
             httpGet:
               path: /actuator/health
