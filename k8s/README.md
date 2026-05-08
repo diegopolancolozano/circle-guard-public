@@ -8,9 +8,9 @@ kubectl apply -k k8s/overlays/dev
 # apply stage overlay
 kubectl apply -k k8s/overlays/stage
 
-# apply prod overlay
-kubectl apply -k k8s/overlays/prod
+# apply master overlay
+kubectl apply -k k8s/overlays/master
 
 Notes:
-- Replace the image prefix TU_USUARIO_DOCKERHUB with your Docker Hub username.
-- Secrets such as database credentials and qr-secret should be created/managed via `kubectl create secret` or a secret manager.
+- The base overlay deploys the six selected services: auth, identity, promotion, gateway, dashboard, and file.
+- Secrets such as database credentials and `qr-secret` are defined in the base manifests for local development.

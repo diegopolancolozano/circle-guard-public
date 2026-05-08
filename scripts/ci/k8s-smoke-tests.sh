@@ -109,11 +109,18 @@ kubectl -n "$ENVIRONMENT" run "$POD_NAME" --image="$IMAGE" --restart=Never --com
 kubectl -n "$ENVIRONMENT" wait --for=condition=Ready "pod/${POD_NAME}" --timeout=60s
 
 wait_deployment_available "circleguard-identity-service"
+wait_deployment_available "circleguard-auth-service"
 wait_deployment_available "circleguard-promotion-service"
 wait_deployment_available "circleguard-gateway-service"
-wait_deployment_available "circleguard-form-service"
+wait_deployment_available "circleguard-dashboard-service"
+wait_deployment_available "circleguard-file-service"
 
 # Test health endpoints instead of authenticated endpoints
+assert_http_200_get_with_retry \
+  "auth-health" \
+  "http://circleguard-auth-service:8080/actuator/health" \
+  "circleguard-auth-service"
+
 assert_http_200_get_with_retry \
   "identity-health" \
   "http://circleguard-identity-service:8080/actuator/health" \
@@ -130,8 +137,13 @@ assert_http_200_get_with_retry \
   "circleguard-gateway-service"
 
 assert_http_200_get_with_retry \
-  "form-health" \
-  "http://circleguard-form-service:8080/actuator/health" \
-  "circleguard-form-service"
+  "dashboard-health" \
+  "http://circleguard-dashboard-service:8080/actuator/health" \
+  "circleguard-dashboard-service"
+
+assert_http_200_get_with_retry \
+  "file-health" \
+  "http://circleguard-file-service:8080/actuator/health" \
+  "circleguard-file-service"
 
 echo "Smoke tests passed"

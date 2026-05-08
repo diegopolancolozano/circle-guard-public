@@ -10,11 +10,11 @@ configMapGenerator:
       - example=placeholder
 
 images:
-  - name: diegoapolancol/circleguard-identity-service
-    newName: diegoapolancol/circleguard-identity-service
-    newTag: dev
   - name: diegoapolancol/circleguard-auth-service
     newName: diegoapolancol/circleguard-auth-service
+    newTag: dev
+  - name: diegoapolancol/circleguard-identity-service
+    newName: diegoapolancol/circleguard-identity-service
     newTag: dev
   - name: diegoapolancol/circleguard-promotion-service
     newName: diegoapolancol/circleguard-promotion-service
@@ -22,9 +22,9 @@ images:
   - name: diegoapolancol/circleguard-gateway-service
     newName: diegoapolancol/circleguard-gateway-service
     newTag: dev
-  - name: diegoapolancol/circleguard-form-service
-    newName: diegoapolancol/circleguard-form-service
+  - name: diegoapolancol/circleguard-dashboard-service
+    newName: diegoapolancol/circleguard-dashboard-service
     newTag: dev
-  - name: diegoapolancol/circleguard-notification-service
-    newName: diegoapolancol/circleguard-notification-service
+  - name: diegoapolancol/circleguard-file-service
+    newName: diegoapolancol/circleguard-file-service
     newTag: dev

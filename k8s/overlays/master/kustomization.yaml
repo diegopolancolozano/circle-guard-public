@@ -1,17 +1,17 @@
-namespace: prod
+namespace: master
 resources:
   - ../../base
 
 images:
   - name: diegoapolancol/circleguard-auth-service
-    newTag: prod
+    newTag: master
   - name: diegoapolancol/circleguard-identity-service
-    newTag: prod
+    newTag: master
   - name: diegoapolancol/circleguard-promotion-service
-    newTag: prod
+    newTag: master
   - name: diegoapolancol/circleguard-gateway-service
-    newTag: prod
+    newTag: master
   - name: diegoapolancol/circleguard-dashboard-service
-    newTag: prod
+    newTag: master
   - name: diegoapolancol/circleguard-file-service
-    newTag: prod
+    newTag: master

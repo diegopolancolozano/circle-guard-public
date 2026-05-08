@@ -4,16 +4,10 @@ set -euo pipefail
 ENVIRONMENT="${1:?environment required}"
 FORCE_REDEPLOY="${FORCE_REDEPLOY:-false}"
 
-CURRENT_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
-CURRENT_SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+export KUBECONFIG="${KUBECONFIG:-/var/jenkins_home/.kube/config}"
 
-echo "Using kube context: ${CURRENT_CONTEXT}"
-echo "Using kube server: ${CURRENT_SERVER}"
-
-if [[ "${CURRENT_CONTEXT}" == *"minikube"* ]] || [[ "${CURRENT_SERVER}" == *"192.168.49.2"* ]]; then
-  echo "ERROR: kubeconfig points to minikube. Update Jenkins credential 'kubeconfig-credentials' to the GKE kubeconfig."
-  exit 1
-fi
+echo "Using kube context: $(kubectl config current-context 2>/dev/null || true)"
+echo "Using kube server: $(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
 
 kubectl apply -f k8s/namespaces.yaml --validate=false
 

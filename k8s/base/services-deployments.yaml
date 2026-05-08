@@ -263,20 +263,20 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: circleguard-form-service
+  name: circleguard-dashboard-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: circleguard-form-service
+      app: circleguard-dashboard-service
   template:
     metadata:
       labels:
-        app: circleguard-form-service
+        app: circleguard-dashboard-service
     spec:
       containers:
-        - name: form
-          image: diegoapolancol/circleguard-form-service:dev
+        - name: dashboard
+          image: diegoapolancol/circleguard-dashboard-service:dev
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -311,10 +311,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: circleguard-form-service
+  name: circleguard-dashboard-service
 spec:
   selector:
-    app: circleguard-form-service
+    app: circleguard-dashboard-service
   ports:
     - protocol: TCP
       port: 8080
@@ -324,37 +324,37 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: circleguard-notification-service
+  name: circleguard-file-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: circleguard-notification-service
+      app: circleguard-file-service
   template:
     metadata:
       labels:
-        app: circleguard-notification-service
+        app: circleguard-file-service
     spec:
       containers:
-        - name: notification
-          image: diegoapolancol/circleguard-notification-service:dev
+        - name: file
+          image: diegoapolancol/circleguard-file-service:dev
           imagePullPolicy: Always
           ports:
-            - containerPort: 8082
+            - containerPort: 8080
           envFrom:
             - secretRef:
                 name: app-config
           startupProbe:
             httpGet:
               path: /actuator/health
-              port: 8082
+              port: 8080
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
-              port: 8082
+              port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -362,7 +362,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /actuator/health
-              port: 8082
+              port: 8080
             initialDelaySeconds: 60
             periodSeconds: 15
             timeoutSeconds: 5
@@ -372,11 +372,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: circleguard-notification-service
+  name: circleguard-file-service
 spec:
   selector:
-    app: circleguard-notification-service
+    app: circleguard-file-service
   ports:
     - protocol: TCP
-      port: 8082
-      targetPort: 8082
+      port: 8080
+      targetPort: 8080

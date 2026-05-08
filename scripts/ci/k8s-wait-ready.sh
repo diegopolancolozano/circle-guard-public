@@ -3,8 +3,8 @@ set -euo pipefail
 
 ENVIRONMENT="${1:?environment required}"
 # Keep generous defaults because Spring services can take several minutes on cold start.
-INFRA_TIMEOUT="${INFRA_TIMEOUT:-600s}"
-SERVICE_TIMEOUT="${SERVICE_TIMEOUT:-600s}"
+INFRA_TIMEOUT="${INFRA_TIMEOUT:-420s}"
+SERVICE_TIMEOUT="${SERVICE_TIMEOUT:-420s}"
 
 wait_for_rollout() {
   local deploy="$1"
@@ -79,12 +79,12 @@ done
 
 echo "=== Deploying application services ==="
 SERVICE_DEPLOYMENTS=(
-  "circleguard-identity-service"
   "circleguard-auth-service"
+  "circleguard-identity-service"
   "circleguard-promotion-service"
   "circleguard-gateway-service"
-  "circleguard-form-service"
-  "circleguard-notification-service"
+  "circleguard-dashboard-service"
+  "circleguard-file-service"
 )
 
 for deploy in "${SERVICE_DEPLOYMENTS[@]}"; do
