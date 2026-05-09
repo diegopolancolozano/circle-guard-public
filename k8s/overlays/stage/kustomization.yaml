@@ -1,17 +1,19 @@
 namespace: stage
 resources:
   - ../../base
+patchesStrategicMerge:
+  - imagepullpolicy-patch.yaml
 
 images:
-  - name: diegoapolancol/circleguard-identity-service
-    newTag: stage
   - name: diegoapolancol/circleguard-auth-service
+    newTag: stage
+  - name: diegoapolancol/circleguard-identity-service
     newTag: stage
   - name: diegoapolancol/circleguard-promotion-service
     newTag: stage
   - name: diegoapolancol/circleguard-gateway-service
     newTag: stage
-  - name: diegoapolancol/circleguard-form-service
+  - name: diegoapolancol/circleguard-dashboard-service
     newTag: stage
-  - name: diegoapolancol/circleguard-notification-service
+  - name: diegoapolancol/circleguard-file-service
     newTag: stage

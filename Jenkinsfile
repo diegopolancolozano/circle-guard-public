@@ -1,19 +1,17 @@
 pipeline {
     agent any
 
-    options {
-        timestamps()
+
+    parameters {
+        booleanParam(name: 'TEARDOWN', defaultValue: false, description: 'Remove the local Kubernetes namespaces and workloads')
     }
 
     environment {
-        DOCKER_IMAGE_PREFIX = "diegopolancolozano/circleguard"
+        DOCKER_IMAGE_PREFIX = "diegoapolancol/circleguard"
         DOCKER_CREDENTIALS_ID = "dockerhub-credentials"
-        KUBECONFIG_CREDENTIALS_ID = "kubeconfig-credentials"
-        QR_SECRET_CREDENTIALS_ID = "qr-secret-value"
         DOCKERHUB_EMAIL = "devops@circleguard.local"
-        GCP_PROJECT = "1026376319321"
-        GKE_CLUSTER_NAME = "circle-guard-cluster"
-        GKE_CLUSTER_LOCATION = "us-central1"
+        TEARDOWN = "false"
+        KUBECONFIG = "/var/jenkins_home/.kube/config"
     }
 
     stages {
@@ -38,9 +36,9 @@ pipeline {
                     } else if (env.BRANCH_NAME == "stage") {
                         env.DEPLOY_ENV = "stage"
                         env.IMAGE_TAGS = "stage"
-                    } else if (env.BRANCH_NAME == "main") {
-                        env.DEPLOY_ENV = "prod"
-                        env.IMAGE_TAGS = "stage,prod"
+                    } else if (env.BRANCH_NAME == "master" || env.BRANCH_NAME == "main") {
+                        env.DEPLOY_ENV = "master"
+                        env.IMAGE_TAGS = "master"
                     } else {
                         env.DEPLOY_ENV = ""
                         env.IMAGE_TAGS = ""
@@ -51,32 +49,16 @@ pipeline {
 
         stage("Build & Unit Tests") {
             steps {
-                sh "./gradlew :services:circleguard-auth-service:test :services:circleguard-identity-service:test :services:circleguard-promotion-service:test :services:circleguard-gateway-service:test :services:circleguard-form-service:test :services:circleguard-notification-service:test"
+                sh "./gradlew clean :services:circleguard-auth-service:bootJar :services:circleguard-identity-service:bootJar :services:circleguard-promotion-service:bootJar :services:circleguard-gateway-service:bootJar :services:circleguard-dashboard-service:bootJar :services:circleguard-file-service:bootJar -x test"
             }
         }
 
-        stage("Terraform Bootstrap K8s") {
+        stage("Prepare Kubernetes") {
             when {
                 expression { return env.IMAGE_TAGS?.trim() }
             }
             steps {
-                withCredentials([
-                    usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD"),
-                    file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG"),
-                    string(credentialsId: env.QR_SECRET_CREDENTIALS_ID, variable: "QR_SECRET"),
-                    // GCP service account JSON (Secret file in Jenkins credentials)
-                    file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')
-                ]) {
-                    // Expose GCP vars to the script; configure them in the job (or as global env)
-                    withCredentials([
-                        usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD"),
-                        file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG"),
-                        string(credentialsId: env.QR_SECRET_CREDENTIALS_ID, variable: "QR_SECRET"),
-                        file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')
-                    ]) {
-                        sh "scripts/ci/terraform-bootstrap.sh"
-                    }
-                }
+                sh "kubectl config current-context"
             }
         }
 
@@ -96,9 +78,7 @@ pipeline {
                 branch "dev"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                    sh "scripts/ci/k8s-deploy.sh dev"
-                }
+                sh "scripts/ci/k8s-deploy.sh dev"
             }
         }
 
@@ -107,9 +87,19 @@ pipeline {
                 branch "stage"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                    sh "scripts/ci/k8s-deploy.sh stage"
+                sh "scripts/ci/k8s-deploy.sh stage"
+            }
+        }
+
+        stage("Deploy Master") {
+            when {
+                anyOf {
+                    branch "master"
+                    branch "main"
                 }
+            }
+            steps {
+                sh "scripts/ci/k8s-deploy.sh master"
             }
         }
 
@@ -118,75 +108,71 @@ pipeline {
                 branch "stage"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                    sh "scripts/ci/k8s-smoke-tests.sh stage"
-                }
+                sh "scripts/ci/k8s-smoke-tests.sh stage"
             }
         }
 
-        stage("Stage Evidence") {
+        stage("Stage E2E Tests") {
             when {
                 branch "stage"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                    sh "scripts/ci/k8s-stage-evidence.sh stage stage-evidence.txt"
-                    archiveArtifacts artifacts: "stage-evidence.txt", onlyIfSuccessful: true
-                }
+                sh "scripts/ci/run-e2e-tests.sh stage"
             }
         }
 
-        stage("Deploy Stage For Main Validation") {
+        stage("Stage Performance Tests") {
             when {
-                branch "main"
+                branch "stage"
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                    sh "scripts/ci/k8s-deploy.sh stage"
-                }
+                sh "scripts/ci/run-locust.sh stage"
             }
         }
 
-        stage("Main E2E Tests") {
+        stage("Master E2E Tests") {
             when {
-                branch "main"
+                anyOf {
+                    branch "master"
+                    branch "main"
+                }
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                    sh "scripts/ci/run-e2e-tests.sh stage"
-                }
+                sh "scripts/ci/run-e2e-tests.sh master"
             }
         }
 
-        stage("Main Performance Tests") {
+        stage("Master Performance Tests") {
             when {
-                branch "main"
-            }
-            steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                    sh "scripts/ci/run-locust.sh stage"
+                anyOf {
+                    branch "master"
+                    branch "main"
                 }
             }
-        }
-
-        stage("Deploy Prod") {
-            when {
-                branch "main"
-            }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                    sh "scripts/ci/k8s-deploy.sh prod"
-                }
+                sh "scripts/ci/run-locust.sh master"
             }
         }
 
         stage("Generate Release Notes") {
             when {
-                branch "main"
+                anyOf {
+                    branch "master"
+                    branch "main"
+                }
             }
             steps {
                 sh "scripts/ci/generate-release-notes.sh"
                 archiveArtifacts artifacts: "release-notes.md", onlyIfSuccessful: true
+            }
+        }
+
+        stage("Teardown All Infrastructure") {
+            when {
+                expression { return env.TEARDOWN == 'true' }
+            }
+            steps {
+                sh "scripts/ci/teardown-all.sh"
             }
         }
     }

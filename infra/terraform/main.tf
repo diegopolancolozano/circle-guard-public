@@ -31,45 +31,29 @@ locals {
   })
 }
 
-resource "kubernetes_namespace_v1" "env" {
+# Reference existing namespaces created by kubectl apply (not managed by Terraform)
+data "kubernetes_namespace_v1" "env" {
   for_each = var.environments
 
   metadata {
     name = each.value
-    labels = {
-      "managed-by" = "terraform"
-      "project"    = "circleguard"
-      "env"        = each.value
-    }
   }
 }
 
-resource "kubernetes_secret_v1" "dockerhub_pull_secret" {
+data "kubernetes_secret_v1" "dockerhub_pull_secret" {
   for_each = var.environments
 
   metadata {
     name      = "dockerhub-pull-secret"
-    namespace = kubernetes_namespace_v1.env[each.key].metadata[0].name
-  }
-
-  type = "kubernetes.io/dockerconfigjson"
-
-  data = {
-    ".dockerconfigjson" = local.dockerconfigjson
+    namespace = data.kubernetes_namespace_v1.env[each.key].metadata[0].name
   }
 }
 
-resource "kubernetes_secret_v1" "qr_secret" {
+data "kubernetes_secret_v1" "qr_secret" {
   for_each = var.environments
 
   metadata {
     name      = "qr-secret"
-    namespace = kubernetes_namespace_v1.env[each.key].metadata[0].name
+    namespace = data.kubernetes_namespace_v1.env[each.key].metadata[0].name
   }
-
-  data = {
-    qr_secret = var.qr_secret
-  }
-
-  type = "Opaque"
 }
