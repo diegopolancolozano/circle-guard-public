@@ -1,0 +1,55 @@
+services:
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
+    container_name: circleguard-jenkins
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    environment:
+      - JENKINS_OPTS=--httpPort=8080
+      - JAVA_OPTS=-Xmx2048m -Xms512m
+    env_file:
+      - .env.jenkins.example
+    volumes:
+      # Volumen persistente para jenkins_home
+      - jenkins-data:/var/jenkins_home
+      # Montaje local para configuración inicial (opcional)
+      - ./jenkins-init:/usr/share/jenkins/ref/init.groovy.d
+      # Acceso a Docker en el host (para builds)
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Acceso a credenciales locales
+      - ~/.docker/config.json:/var/jenkins_home/.docker/config.json:ro
+      - ~/.kube/config:/var/jenkins_home/.kube/config:ro
+    user: root
+    networks:
+      - jenkins-network
+
+  # Contenedor auxiliar para Docker-in-Docker si es necesario
+  docker-dind:
+    image: docker:dind
+    container_name: circleguard-docker-dind
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "2375:2375"
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - dind-storage:/var/lib/docker
+    networks:
+      - jenkins-network
+    profiles:
+      - optional  # Solo si quieres docker-in-docker
+
+volumes:
+  jenkins-data:
+    driver: local
+  dind-storage:
+    driver: local
+
+networks:
+  jenkins-network:
+    driver: bridge

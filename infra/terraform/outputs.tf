@@ -1,4 +1,4 @@
 output "managed_namespaces" {
-  description = "Namespaces gestionados por Terraform"
-  value       = sort([for ns in kubernetes_namespace_v1.env : ns.metadata[0].name])
+  description = "Namespaces referenciados por Terraform"
+  value       = sort([for ns in data.kubernetes_namespace_v1.env : ns.metadata[0].name])
 }

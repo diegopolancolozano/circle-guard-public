@@ -2,6 +2,7 @@ package com.circleguard.auth.security;
 
 import com.circleguard.auth.service.CustomUserDetailsService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.*;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.core.*;
@@ -12,18 +13,23 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class DualChainAuthenticationProvider implements AuthenticationProvider {
 
-    private final LdapAuthenticationProvider ldapProvider;
+    @Autowired(required = false)
+    private LdapAuthenticationProvider ldapProvider;
+
     private final DaoAuthenticationProvider localProvider;
 
     @Override
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
-        try {
-            // Chain 1: Try LDAP
-            return ldapProvider.authenticate(authentication);
-        } catch (AuthenticationException e) {
-            // Chain 2: Fallback to Local DB
-            return localProvider.authenticate(authentication);
+        // If LDAP provider present, try it first
+        if (ldapProvider != null) {
+            try {
+                return ldapProvider.authenticate(authentication);
+            } catch (AuthenticationException e) {
+                // fall through to local provider
+            }
         }
+        // Fallback to Local DB
+        return localProvider.authenticate(authentication);
     }
 
     @Override

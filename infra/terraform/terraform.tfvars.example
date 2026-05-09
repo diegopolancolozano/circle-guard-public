@@ -4,3 +4,11 @@ dockerhub_password = "TU_TOKEN_DOCKERHUB"
 dockerhub_email    = "tu-correo@ejemplo.com"
 qr_secret          = "CAMBIA_ESTE_SECRET"
 # environments      = ["dev", "stage", "prod"]
+# If you prefer Terraform to configure Kubernetes provider using GKE, enable use_gke
+# and set the GCP project/cluster information. Ensure GOOGLE_APPLICATION_CREDENTIALS
+# points to a service account JSON with permissions to get cluster info and manage
+# resources as needed.
+# use_gke = true
+# gcp_project = "mi-proyecto-gcp"
+# gke_cluster_name = "circle-guard-cluster"
+# gke_cluster_location = "us-central1"
