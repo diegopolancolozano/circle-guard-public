@@ -3,17 +3,25 @@ set -euo pipefail
 
 ENVIRONMENT="${1:?environment required}"
 
-if [[ -n "${KUBECONFIG:-}" ]]; then
+if [ -n "${KUBECONFIG:-}" ]; then
   export KUBECONFIG
-elif [[ -f /var/jenkins_home/.kube/config ]]; then
+elif [ -f /var/jenkins_home/.kube/config ]; then
   export KUBECONFIG="/var/jenkins_home/.kube/config"
 else
   export KUBECONFIG="${HOME}/.kube/config"
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-LOCUST_DIR="${REPO_ROOT}/tests/performance"
+# Determine repository root and locust directory in a way that works inside Jenkins
+if [ -n "${WORKSPACE:-}" ]; then
+  LOCUST_DIR="${WORKSPACE}/tests/performance"
+elif [ -d "${PWD}/tests/performance" ]; then
+  LOCUST_DIR="${PWD}/tests/performance"
+else
+  # fallback: script location (when executed directly)
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+  LOCUST_DIR="${REPO_ROOT}/tests/performance"
+fi
 
 PORT_FORWARD_PIDS=()
 
