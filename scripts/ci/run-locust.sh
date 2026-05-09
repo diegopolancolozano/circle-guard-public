@@ -3,7 +3,13 @@ set -euo pipefail
 
 ENVIRONMENT="${1:?environment required}"
 
-export KUBECONFIG="${KUBECONFIG:-/var/jenkins_home/.kube/config}"
+if [[ -n "${KUBECONFIG:-}" ]]; then
+  export KUBECONFIG
+elif [[ -f /var/jenkins_home/.kube/config ]]; then
+  export KUBECONFIG="/var/jenkins_home/.kube/config"
+else
+  export KUBECONFIG="${HOME}/.kube/config"
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -26,8 +32,8 @@ wait_for_health() {
     fi
     sleep 1
   done
-  echo "ERROR: port-forward at ${local_url} did not become ready"
-  exit 1
+  echo "ERROR: port-forward at ${local_url} did not become ready" >&2
+  return 1
 }
 
 svc_url() {
