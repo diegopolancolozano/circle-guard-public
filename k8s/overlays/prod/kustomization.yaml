@@ -3,15 +3,15 @@ resources:
   - ../../base
 
 images:
-  - name: diegoapolancol/circleguard-identity-service
-    newTag: prod
   - name: diegoapolancol/circleguard-auth-service
+    newTag: prod
+  - name: diegoapolancol/circleguard-identity-service
     newTag: prod
   - name: diegoapolancol/circleguard-promotion-service
     newTag: prod
   - name: diegoapolancol/circleguard-gateway-service
     newTag: prod
-  - name: diegoapolancol/circleguard-form-service
+  - name: diegoapolancol/circleguard-dashboard-service
     newTag: prod
-  - name: diegoapolancol/circleguard-notification-service
+  - name: diegoapolancol/circleguard-file-service
     newTag: prod

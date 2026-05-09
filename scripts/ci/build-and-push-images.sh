@@ -13,31 +13,24 @@ SERVICES=(
   "circleguard-identity-service"
   "circleguard-promotion-service"
   "circleguard-gateway-service"
-  "circleguard-form-service"
-  "circleguard-notification-service"
+  "circleguard-dashboard-service"
+  "circleguard-file-service"
 )
 
-# Keep the repository suffix from the configured prefix, but always push to the
-# authenticated DockerHub namespace. That avoids mismatches when Jenkins uses a
-# credential whose username differs from the hardcoded prefix in the pipeline.
-image_repository_suffix="${IMAGE_PREFIX_TEMPLATE#*/}"
-if [ -z "$image_repository_suffix" ] || [ "$image_repository_suffix" = "$IMAGE_PREFIX_TEMPLATE" ]; then
-  image_repository_suffix="circleguard"
-fi
-
-IMAGE_PREFIX="${DOCKERHUB_USERNAME}/${image_repository_suffix}"
+# Use the configured image prefix as-is so CI pushes exactly where manifests pull.
+IMAGE_PREFIX="${IMAGE_PREFIX_TEMPLATE}"
 
 echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
 # Build all jars once to avoid recompiling inside each image build
 echo "Building all service jars..."
-./gradlew \
+./gradlew clean \
   :services:circleguard-auth-service:bootJar \
   :services:circleguard-identity-service:bootJar \
   :services:circleguard-promotion-service:bootJar \
   :services:circleguard-gateway-service:bootJar \
-  :services:circleguard-form-service:bootJar \
-  :services:circleguard-notification-service:bootJar -x test
+  :services:circleguard-dashboard-service:bootJar \
+  :services:circleguard-file-service:bootJar -x test
 
 for service_dir in "${SERVICES[@]}"; do
   service_suffix="${service_dir#circleguard-}"

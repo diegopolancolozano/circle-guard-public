@@ -14,8 +14,8 @@ public class QrTokenService {
     private final Key key;
     private final long expiration;
 
-    public QrTokenService(@Value("${qr.secret}") String secret, 
-                         @Value("${qr.expiration:60000}") long expiration) {
+    public QrTokenService(@Value("${QR_SECRET:change-me}") String secret, 
+                         @Value("${QR_EXPIRATION:60000}") long expiration) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes());
         this.expiration = expiration;
     }

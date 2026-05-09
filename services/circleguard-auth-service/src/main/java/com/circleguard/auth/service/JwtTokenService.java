@@ -17,8 +17,8 @@ public class JwtTokenService {
     private final Key key;
     private final long expiration;
 
-    public JwtTokenService(@Value("${jwt.secret}") String secret, 
-                         @Value("${jwt.expiration}") long expiration) {
+    public JwtTokenService(@Value("${QR_SECRET:change-me}") String secret, 
+                         @Value("${JWT_EXPIRATION:3600000}") long expiration) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes());
         this.expiration = expiration;
     }
