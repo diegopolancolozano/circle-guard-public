@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-auth-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: auth
+        imagePullPolicy: Never
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-identity-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: identity
+        imagePullPolicy: Never
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-promotion-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: promotion
+        imagePullPolicy: Never
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-gateway-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: gateway
+        imagePullPolicy: Never
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-dashboard-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: dashboard
+        imagePullPolicy: Never
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-file-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: file
+        imagePullPolicy: Never

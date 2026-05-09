@@ -21,7 +21,7 @@ spec:
       containers:
         - name: identity
           image: diegoapolancol/circleguard-identity-service:dev
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           envFrom:
@@ -82,7 +82,7 @@ spec:
       containers:
         - name: auth
           image: diegoapolancol/circleguard-auth-service:dev
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           envFrom:
@@ -149,7 +149,7 @@ spec:
       containers:
         - name: promotion
           image: diegoapolancol/circleguard-promotion-service:dev
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8081
           envFrom:
@@ -210,7 +210,7 @@ spec:
       containers:
         - name: gateway
           image: diegoapolancol/circleguard-gateway-service:dev
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           envFrom:
@@ -277,7 +277,7 @@ spec:
       containers:
         - name: dashboard
           image: diegoapolancol/circleguard-dashboard-service:dev
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           envFrom:
@@ -338,7 +338,7 @@ spec:
       containers:
         - name: file
           image: diegoapolancol/circleguard-file-service:dev
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           envFrom:
