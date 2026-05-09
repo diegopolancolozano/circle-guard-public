@@ -5,6 +5,10 @@ ENVIRONMENT="${1:?environment required}"
 
 export KUBECONFIG="${KUBECONFIG:-/var/jenkins_home/.kube/config}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+LOCUST_DIR="${REPO_ROOT}/tests/performance"
+
 PORT_FORWARD_PIDS=()
 
 cleanup() {
@@ -49,7 +53,7 @@ docker run --rm \
   -e IDENTITY_BASE_URL="$IDENTITY_BASE_URL" \
   -e GATEWAY_BASE_URL="$GATEWAY_BASE_URL" \
   -e QR_SECRET="$QR_SECRET" \
-  -v "$PWD/tests/performance:/mnt/performance" \
+  -v "${LOCUST_DIR}:/mnt/performance" \
   locustio/locust:2.24.1 \
   -f /mnt/performance/locustfile.py \
   --headless \
