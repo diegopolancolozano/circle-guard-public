@@ -6,20 +6,14 @@ patchesStrategicMerge:
 
 images:
   - name: diegoapolancol/circleguard-auth-service
-    newName: circleguard-auth-service
-    newTag: latest
+    newTag: stage
   - name: diegoapolancol/circleguard-identity-service
-    newName: circleguard-identity-service
-    newTag: latest
+    newTag: stage
   - name: diegoapolancol/circleguard-promotion-service
-    newName: circleguard-promotion-service
-    newTag: latest
+    newTag: stage
   - name: diegoapolancol/circleguard-gateway-service
-    newName: circleguard-gateway-service
-    newTag: latest
+    newTag: stage
   - name: diegoapolancol/circleguard-dashboard-service
-    newName: circleguard-dashboard-service
-    newTag: latest
+    newTag: stage
   - name: diegoapolancol/circleguard-file-service
-    newName: circleguard-file-service
-    newTag: latest
+    newTag: stage

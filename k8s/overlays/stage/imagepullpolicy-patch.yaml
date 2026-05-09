@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
       - name: auth
-        imagePullPolicy: Never
+        imagePullPolicy: Always
 
 ---
 apiVersion: apps/v1
@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: identity
-        imagePullPolicy: Never
+        imagePullPolicy: Always
 
 ---
 apiVersion: apps/v1
@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
       - name: promotion
-        imagePullPolicy: Never
+        imagePullPolicy: Always
 
 ---
 apiVersion: apps/v1
@@ -43,7 +43,7 @@ spec:
     spec:
       containers:
       - name: gateway
-        imagePullPolicy: Never
+        imagePullPolicy: Always
 
 ---
 apiVersion: apps/v1
@@ -55,7 +55,7 @@ spec:
     spec:
       containers:
       - name: dashboard
-        imagePullPolicy: Never
+        imagePullPolicy: Always
 
 ---
 apiVersion: apps/v1
@@ -67,4 +67,4 @@ spec:
     spec:
       containers:
       - name: file
-        imagePullPolicy: Never
+        imagePullPolicy: Always
