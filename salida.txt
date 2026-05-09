@@ -1,0 +1,125 @@
+=== Deploying infrastructure components ===
+Waiting for deployment postgres in stage (timeout=600s)
+deployment "postgres" successfully rolled out
+Waiting for deployment redis in stage (timeout=600s)
+deployment "redis" successfully rolled out
+Waiting for deployment neo4j in stage (timeout=600s)
+deployment "neo4j" successfully rolled out
+Waiting for deployment zookeeper in stage (timeout=600s)
+deployment "zookeeper" successfully rolled out
+Waiting for deployment kafka in stage (timeout=600s)
+Waiting for deployment "kafka" rollout to finish: 0 of 1 updated replicas are available...
+deployment "kafka" successfully rolled out
+Waiting for deployment openldap in stage (timeout=600s)
+deployment "openldap" successfully rolled out
+=== Deploying application services ===
+Waiting for deployment circleguard-identity-service in stage (timeout=600s)
+deployment "circleguard-identity-service" successfully rolled out
+Waiting for deployment circleguard-auth-service in stage (timeout=600s)
+error: deployment "circleguard-auth-service" exceeded its progress deadline
+ERROR: rollout failed or timed out for deployment circleguard-auth-service in stage
+== Deployment status ==
+NAME                       READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                                          SELECTOR
+circleguard-auth-service   0/1     1            0           3h    auth         diegoapolancol/circleguard-auth-service:stage   app=circleguard-auth-service
+== ReplicaSets for circleguard-auth-service ==
+NAME                                  DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES                                          SELECTOR
+circleguard-auth-service-54c745bf89   1         1         0       33m   auth         diegoapolancol/circleguard-auth-service:stage   app=circleguard-auth-service,pod-template-hash=54c745bf89
+circleguard-auth-service-7cf7cdb9cf   1         1         0       3h    auth         diegoapolancol/circleguard-auth-service:stage   app=circleguard-auth-service,pod-template-hash=7cf7cdb9cf
+== Pods for circleguard-auth-service ==
+NAME                                        READY   STATUS             RESTARTS         AGE   IP           NODE                                                  NOMINATED NODE   READINESS GATES
+circleguard-auth-service-54c745bf89-c6snr   0/1     CrashLoopBackOff   10 (4m14s ago)   33m   10.32.2.17   gke-circle-guard-cluster-default-pool-1d1ef0e1-c5xg   <none>           <none>
+circleguard-auth-service-7cf7cdb9cf-mzjg4   0/1     CrashLoopBackOff   9 (4m5s ago)     34m   10.32.1.21   gke-circle-guard-cluster-default-pool-3ad6a9fe-94kk   <none>           <none>
+-- Logs for pod circleguard-auth-service-54c745bf89-c6snr (last 100 lines) --
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-05-07T20:20:08.922Z ERROR 1 --- [           main] o.s.b.d.LoggingFailureAnalysisReporter   : 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 0 of constructor in com.circleguard.auth.security.DualChainAuthenticationProvider required a bean of type 'org.springframework.security.ldap.authentication.LdapAuthenticationProvider' that could not be found.
+
+...
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-05-07T20:20:08.922Z ERROR 1 --- [           main] o.s.b.d.LoggingFailureAnalysisReporter   : 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Parameter 0 of constructor in com.circleguard.auth.security.DualChainAuthenticationProvider required a bean of type 'org.springframework.security.ldap.authentication.LdapAuthenticationProvider' that could not be found.
+
+
+Action:
+
+Consider defining a bean of type 'org.springframework.security.ldap.authentication.LdapAuthenticationProvider' in your configuration.
+
+-- Describe pod circleguard-auth-service-54c745bf89-c6snr --
+Name:             circleguard-auth-service-54c745bf89-c6snr
+Namespace:        stage
+Priority:         0
+Service Account:  default
+Node:             gke-circle-guard-cluster-default-pool-1d1ef0e1-c5xg/10.128.0.12
+Start Time:       Thu, 07 May 2026 19:50:44 +0000
+Labels:           app=circleguard-auth-service
+                  pod-template-hash=54c745bf89
+                  topology.kubernetes.io/region=us-central1
+                  topology.kubernetes.io/zone=us-central1-a
+Annotations:      <none>
+Status:           Running
+IP:               10.32.2.17
+IPs:
+  IP:           10.32.2.17
+Controlled By:  ReplicaSet/circleguard-auth-service-54c745bf89
+Containers:
+  auth:
+    Container ID:   containerd://9c1610df690e72e8a31723ec6f3d119d58ba2f0a6aca10c5b38ff1889e55ef82
+    Image:          diegoapolancol/circleguard-auth-service:stage
+    Image ID:       docker.io/diegoapolancol/circleguard-auth-service@sha256:5e7d14a3f9bf06be457193ca766f3444086e7f426235e8e655496cd477d64c7c
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Thu, 07 May 2026 20:19:54 +0000
+      Finished:     Thu, 07 May 2026 20:20:08 +0000
+    Ready:          False
+    Restart Count:  10
+    Liveness:       http-get http://:8080/actuator/health delay=60s timeout=5s period=15s #success=1 #failure=3
+    Readiness:      http-get http://:8080/actuator/health delay=30s timeout=5s period=10s #success=1 #failure=3
+    Startup:        http-get http://:8080/actuator/health delay=0s timeout=5s period=10s #success=1 #failure=30
+    Environment Variables from:
+      app-config  Secret  Optional: false
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-xvpfz (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-xvpfz:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+
+...
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-05-07T20:20:17.392Z ERROR 1 --- [           main] o.s.b.d.LoggingFailureAnalysisReporter   : 

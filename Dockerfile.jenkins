@@ -1,0 +1,24 @@
+FROM jenkins/jenkins:lts
+
+# Run as root for plugin installation
+USER root
+
+# Copy plugins.txt for automated plugin installation
+COPY jenkins-init/plugins.txt /usr/share/jenkins/plugins.txt
+
+# Install plugins using jenkins-plugin-cli
+RUN jenkins-plugin-cli -f /usr/share/jenkins/plugins.txt
+
+# Copy init groovy scripts
+COPY jenkins-init/*.groovy /usr/share/jenkins/ref/init.groovy.d/
+
+# Install additional tools needed for CI/CD
+RUN apt-get update && apt-get install -y \
+    docker.io \
+    kubectl \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Switch back to jenkins user
+USER jenkins

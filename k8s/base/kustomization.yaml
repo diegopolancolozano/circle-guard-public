@@ -1,33 +1,30 @@
 resources:
   - services-deployments.yaml
   - infra-deployments.yaml
+  - app-config-secret.yaml
+  - qr-secret.yaml
 
 configMapGenerator:
   - name: circleguard-config
     literals:
       - example=placeholder
 
-secretGenerator:
-  - name: qr-secret
-    literals:
-      - qr_secret=change-me
-
 images:
-  - name: TU_USUARIO_DOCKERHUB/circleguard-identity-service
-    newName: TU_USUARIO_DOCKERHUB/circleguard-identity-service
+  - name: diegoapolancol/circleguard-auth-service
+    newName: diegoapolancol/circleguard-auth-service
     newTag: dev
-  - name: TU_USUARIO_DOCKERHUB/circleguard-auth-service
-    newName: TU_USUARIO_DOCKERHUB/circleguard-auth-service
+  - name: diegoapolancol/circleguard-identity-service
+    newName: diegoapolancol/circleguard-identity-service
     newTag: dev
-  - name: TU_USUARIO_DOCKERHUB/circleguard-promotion-service
-    newName: TU_USUARIO_DOCKERHUB/circleguard-promotion-service
+  - name: diegoapolancol/circleguard-promotion-service
+    newName: diegoapolancol/circleguard-promotion-service
     newTag: dev
-  - name: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
-    newName: TU_USUARIO_DOCKERHUB/circleguard-gateway-service
+  - name: diegoapolancol/circleguard-gateway-service
+    newName: diegoapolancol/circleguard-gateway-service
     newTag: dev
-  - name: TU_USUARIO_DOCKERHUB/circleguard-form-service
-    newName: TU_USUARIO_DOCKERHUB/circleguard-form-service
+  - name: diegoapolancol/circleguard-dashboard-service
+    newName: diegoapolancol/circleguard-dashboard-service
     newTag: dev
-  - name: TU_USUARIO_DOCKERHUB/circleguard-notification-service
-    newName: TU_USUARIO_DOCKERHUB/circleguard-notification-service
+  - name: diegoapolancol/circleguard-file-service
+    newName: diegoapolancol/circleguard-file-service
     newTag: dev

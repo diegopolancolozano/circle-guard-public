@@ -32,6 +32,14 @@ The Jenkins stage `Terraform Bootstrap K8s` uses:
 
 This stage is idempotent and prepares base resources before service deployment.
 
+### Namespace management
+
+**Important:** Kubernetes namespaces (`dev`, `stage`, `prod`) are created by `kubectl apply -f k8s/namespaces.yaml` in the `Deploy` stage and are **not** managed by Terraform.
+Terraform uses a `data` source to reference existing namespaces, avoiding conflicts when rerunning pipelines across different branches.
+
+If you encounter "namespaces already exist" errors from Terraform, it means the namespaces were already created in a previous pipeline run.
+This is normal and expected behavior—Terraform will skip namespace creation and proceed to create/update secrets and config within those namespaces.
+
 ## VM Docker Commands
 
 Use these commands on the VM where the repository is checked out.
@@ -75,3 +83,36 @@ This file contains:
 - deployment rollout status
 - pod and service inventory
 - k8s-wide output useful for screenshots and report evidence
+
+## Managing resources to save cloud costs
+
+To free up GKE resources without permanently deleting your namespaces and configurations, use the teardown script:
+
+### Scale down all microservices (keep namespace and configs)
+
+```bash
+./scripts/ci/k8s-teardown.sh dev
+```
+
+This scales all deployments (microservices and infrastructure) to 0 replicas, freeing compute resources while preserving:
+- Kubernetes namespaces
+- ConfigMaps and Secrets
+- Service definitions
+
+### Completely delete a namespace
+
+```bash
+./scripts/ci/k8s-teardown.sh dev --delete-namespace
+```
+
+This permanently deletes the entire namespace and all resources within it. Use this for cleanup.
+
+### Bring services back online
+
+To bring services back online after scaling down, redeploy:
+
+```bash
+./scripts/ci/k8s-deploy.sh dev
+```
+
+This reapplies the deployment manifests and scales services back to 1 replica (or configured count).
