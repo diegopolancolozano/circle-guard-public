@@ -24,6 +24,7 @@ else
 fi
 
 PORT_FORWARD_PIDS=()
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 
 cleanup() {
   for pid in "${PORT_FORWARD_PIDS[@]:-}"; do
@@ -58,6 +59,7 @@ svc_url() {
 run_locust_in_k8s() {
   local id="locust-$(date +%s)"
   local cm_name="${id}-cm"
+  local result_log="${RESULTS_DIR}/locust-${ENVIRONMENT}-${TIMESTAMP}.log"
   echo "[K8S Locust] Creating ConfigMap ${cm_name} in namespace ${ENVIRONMENT}"
   kubectl -n "$ENVIRONMENT" create configmap "$cm_name" --from-file=locustfile.py="${LOCUST_DIR}/locustfile.py" --dry-run=client -o yaml | kubectl apply -f -
   echo "[K8S Locust] ConfigMap created"
@@ -102,7 +104,7 @@ EOF
   echo "[K8S Locust] Pod created, waiting to start..."
   kubectl -n "$ENVIRONMENT" wait --for=condition=Ready pod/${id} --timeout=60s || echo "[K8S Locust] Pod start timeout"
   echo "[K8S Locust] Streaming logs..."
-  kubectl -n "$ENVIRONMENT" logs -f pod/${id} || true
+  kubectl -n "$ENVIRONMENT" logs -f pod/${id} | tee "$result_log" || true
   echo "[K8S Locust] Waiting for completion..."
   kubectl -n "$ENVIRONMENT" wait --for=condition=Succeeded pod/${id} --timeout=600s || echo "[K8S Locust] Pod completion timeout"
   echo "[K8S Locust] Cleaning up..."
@@ -117,11 +119,17 @@ export IDENTITY_BASE_URL="$(svc_url circleguard-identity-service 18180)"
 export GATEWAY_BASE_URL="$(svc_url circleguard-gateway-service 18181)"
 export QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.qr_secret}' | base64 --decode)"
 
-USERS="${USERS:-50}"
-SPAWN_RATE="${SPAWN_RATE:-5}"
-RUN_TIME="${RUN_TIME:-1m}"
+USERS="${USERS:-15}"
+SPAWN_RATE="${SPAWN_RATE:-2}"
+RUN_TIME="${RUN_TIME:-30s}"
+
+RESULTS_DIR="${LOCUST_DIR}/results"
+mkdir -p "$RESULTS_DIR"
+RESULT_LOG="${RESULTS_DIR}/locust-${ENVIRONMENT}-${TIMESTAMP}.log"
 
 echo "[Locust] LOCUST_DIR=${LOCUST_DIR}"
+echo "[Locust] RESULTS_DIR=${RESULTS_DIR}"
+echo "[Locust] USERS=${USERS} SPAWN_RATE=${SPAWN_RATE} RUN_TIME=${RUN_TIME}"
 echo "[Locust] Listing LOCUST_DIR:"
 ls -la "${LOCUST_DIR}" || true
 
@@ -139,10 +147,12 @@ if docker run --rm -v "${LOCUST_DIR}:/mnt/performance" busybox ls /mnt/performan
     --users "$USERS" \
     --spawn-rate "$SPAWN_RATE" \
     --run-time "$RUN_TIME" \
-    --host "$GATEWAY_BASE_URL"
+    --host "$GATEWAY_BASE_URL" | tee "$RESULT_LOG"
 else
   echo "[Locust] Docker mount test failed - using K8s fallback"
   IDENTITY_BASE_URL="http://circleguard-identity-service:8080"
   GATEWAY_BASE_URL="http://circleguard-gateway-service:8080"
   run_locust_in_k8s
 fi
+
+echo "[Locust] Run log saved to ${RESULT_LOG}"

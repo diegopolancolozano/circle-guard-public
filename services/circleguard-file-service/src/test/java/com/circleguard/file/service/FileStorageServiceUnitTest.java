@@ -31,4 +31,14 @@ class FileStorageServiceUnitTest {
         assertNotNull(filename);
         assertTrue(Files.exists(Path.of("uploads").resolve(filename)));
     }
+
+    @Test
+    void shouldKeepOriginalFilenameSuffix() {
+        FileStorageService svc = new FileStorageService();
+        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", "payload".getBytes());
+
+        String filename = svc.saveFile(file);
+
+        assertTrue(filename.endsWith("_report.pdf"));
+    }
 }

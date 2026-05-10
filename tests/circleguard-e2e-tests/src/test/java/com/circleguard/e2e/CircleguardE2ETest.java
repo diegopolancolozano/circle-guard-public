@@ -3,6 +3,7 @@ package com.circleguard.e2e;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.*;
+import java.io.File;
 
 import java.util.Map;
 import java.util.UUID;
@@ -16,14 +17,14 @@ class CircleguardE2ETest {
     private String identityBaseUrl;
     private String promotionBaseUrl;
     private String gatewayBaseUrl;
-        private String formBaseUrl;
+        private String fileBaseUrl;
 
     @BeforeAll
     void setUp() {
         identityBaseUrl = requiredEnv("IDENTITY_BASE_URL");
         promotionBaseUrl = requiredEnv("PROMOTION_BASE_URL");
         gatewayBaseUrl = requiredEnv("GATEWAY_BASE_URL");
-        formBaseUrl = requiredEnv("FORM_BASE_URL");
+        fileBaseUrl = requiredEnv("FILE_BASE_URL");
 
         RestAssured.enableLoggingOfRequestAndResponseIfValidationFails();
     }
@@ -75,19 +76,24 @@ class CircleguardE2ETest {
     }
 
     @Test
-    void shouldSubmitHealthSurvey() {
+    void shouldUploadFile() {
+        File tempFile = new File("e2e-upload.txt");
+        try {
+            java.nio.file.Files.writeString(tempFile.toPath(), "e2e-content");
+        } catch (java.io.IOException e) {
+            throw new RuntimeException(e);
+        }
+
         given()
-                .baseUri(formBaseUrl)
-                .contentType(ContentType.JSON)
-                .body(Map.of(
-                        "anonymousId", UUID.randomUUID().toString(),
-                        "symptoms", java.util.List.of("COUGH", "FEVER")
-                ))
+                .baseUri(fileBaseUrl)
+                .multiPart("file", tempFile, "text/plain")
         .when()
-                .post("/api/v1/surveys")
+                .post("/api/v1/files/upload")
         .then()
                 .statusCode(200)
-                .body("id", notNullValue());
+                .body("filename", notNullValue());
+
+        tempFile.delete();
     }
 
     @Test
@@ -98,6 +104,19 @@ class CircleguardE2ETest {
                 .get("/api/v1/access-points/{id}", UUID.randomUUID())
         .then()
                 .statusCode(404);
+    }
+
+    @Test
+    void shouldRejectEmptyGatewayToken() {
+        given()
+                .baseUri(gatewayBaseUrl)
+                .contentType(ContentType.JSON)
+                .body(Map.of("token", ""))
+        .when()
+                .post("/api/v1/gate/validate")
+        .then()
+                .statusCode(200)
+                .body("valid", equalTo(false));
     }
 
     private static String requiredEnv(String key) {
