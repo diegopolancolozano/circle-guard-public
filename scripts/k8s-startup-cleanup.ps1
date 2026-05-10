@@ -1,5 +1,6 @@
-# Run this once after Docker Desktop restarts to prevent cluster saturation
-# It scales down heavy infra and cleans stale pods before they OOM the node
+# Run automatically after Docker Desktop restarts.
+# Scales down ALL namespaces to 0 to prevent RAM saturation.
+# The pipeline will scale up only what it needs when it runs.
 
 Write-Host "Waiting for Kubernetes to be ready..." -ForegroundColor Yellow
 $ready = $false
@@ -9,33 +10,25 @@ for ($i = 1; $i -le 30; $i++) {
         $ready = $true
         break
     }
-    Write-Host "  Attempt $i/30 - not ready yet..."
+    Write-Host "  Attempt $i/30..."
     Start-Sleep -Seconds 5
 }
 
 if (-not $ready) {
-    Write-Error "Kubernetes did not become ready in time"
+    Write-Error "Kubernetes did not become ready"
     exit 1
 }
 
-Write-Host "Kubernetes is ready. Cleaning up..." -ForegroundColor Green
+Write-Host "Kubernetes ready. Scaling everything to 0..." -ForegroundColor Green
 
-# Scale down heavy infra in all namespaces
-foreach ($ns in @("stage", "dev", "master", "prod")) {
+foreach ($ns in @("dev", "stage", "master", "prod")) {
     $exists = kubectl get namespace $ns 2>&1
-    if ($exists -notmatch "Error|NotFound") {
-        Write-Host "[$ns] Scaling down neo4j and openldap..."
-        kubectl scale deployment neo4j openldap -n $ns --replicas=0 2>&1 | Out-Null
-
-        Write-Host "[$ns] Deleting Error/CrashLoop pods..."
-        kubectl get pods -n $ns --no-headers 2>&1 | ForEach-Object {
-            $cols = $_ -split '\s+'
-            if ($cols[2] -match "Error|CrashLoop|OOMKilled") {
-                kubectl delete pod $cols[0] -n $ns --grace-period=0 --force 2>&1 | Out-Null
-                Write-Host "  Deleted: $($cols[0])"
-            }
-        }
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[$ns] Scaling all deployments to 0..."
+        kubectl scale deployment --all -n $ns --replicas=0 2>&1 | Out-Null
+        Write-Host "[$ns] Done."
     }
 }
 
-Write-Host "Done. Cluster is clean and ready." -ForegroundColor Green
+Write-Host ""
+Write-Host "All namespaces scaled to 0. Run the Jenkins pipeline to deploy." -ForegroundColor Green
