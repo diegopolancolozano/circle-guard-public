@@ -61,6 +61,8 @@ start_port_forward() {
   local pid=$!
   # Write PID to file so the parent process can clean it up
   echo "$pid" >> "$PF_PID_FILE"
+  # Disown so the process survives if the parent shell exits
+  disown "$pid" 2>/dev/null || true
 
   # Give the port-forward process time to establish the tunnel
   sleep 3

@@ -5,6 +5,9 @@ dependencies {
     testAnnotationProcessor("org.projectlombok:lombok:1.18.32")
     testImplementation("io.rest-assured:rest-assured:5.4.0")
     testImplementation("io.rest-assured:json-path:5.4.0")
+    // Required by REST Assured to serialize Map bodies as JSON
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.17.0")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
 }
 
 tasks.withType<Test> {
