@@ -50,7 +50,7 @@ start_port_forward() {
 
   # Kill any stale port-forward on this port
   pkill -f "port-forward.*${local_port}:" >/dev/null 2>&1 || true
-  sleep 1
+  sleep 2
 
   echo "=== Starting port-forward: ${service_name} -> ${local_url} ===" >&2
   kubectl -n "$ENVIRONMENT" port-forward \
@@ -61,6 +61,9 @@ start_port_forward() {
   local pid=$!
   # Write PID to file so the parent process can clean it up
   echo "$pid" >> "$PF_PID_FILE"
+
+  # Give the port-forward process time to establish the tunnel
+  sleep 3
 
   if ! wait_for_health "$local_url"; then
     echo "=== Port-forward log for ${service_name} ===" >&2
