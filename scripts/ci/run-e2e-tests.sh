@@ -5,59 +5,108 @@ ENVIRONMENT="${1:?environment required}"
 
 export KUBECONFIG="${KUBECONFIG:-/var/jenkins_home/.kube/config}"
 
-PORT_FORWARD_PIDS=()
+PF_PID_FILE="/tmp/e2e-pf-pids-$$"
+: > "$PF_PID_FILE"
 
 cleanup() {
-  for pid in "${PORT_FORWARD_PIDS[@]:-}"; do
-    kill "$pid" >/dev/null 2>&1 || true
-  done
+  echo "=== Cleaning up port-forwards ==="
+  if [[ -f "$PF_PID_FILE" ]]; then
+    while IFS= read -r pid; do
+      kill "$pid" >/dev/null 2>&1 || true
+    done < "$PF_PID_FILE"
+    rm -f "$PF_PID_FILE"
+  fi
 }
 trap cleanup EXIT
 
+# Wait up to 7.5 minutes for a health endpoint to respond
 wait_for_health() {
   local local_url="$1"
-  for attempt in $(seq 1 150); do
-    if curl -fsS "$local_url/actuator/health" >/dev/null 2>&1; then
+  local max_attempts=150
+  local sleep_secs=3
+  local attempt
+
+  for attempt in $(seq 1 "$max_attempts"); do
+    if curl -fsS "${local_url}/actuator/health" >/dev/null 2>&1; then
+      echo "[health] ${local_url} UP (attempt ${attempt})" >&2
       return 0
     fi
-    sleep 3
+    echo "[health] ${local_url} not ready (attempt ${attempt}/${max_attempts}), waiting ${sleep_secs}s..." >&2
+    sleep "$sleep_secs"
   done
-  echo "ERROR: port-forward at ${local_url} did not become ready"
-  exit 1
+
+  echo "ERROR: port-forward at ${local_url} did not become ready after $((max_attempts * sleep_secs))s" >&2
+  return 1
 }
 
-svc_url() {
+# Start a port-forward, register its PID in the PID file, wait for health.
+# Prints the local URL to stdout (safe to use in $() without losing the PID).
+start_port_forward() {
   local service_name="$1"
   local local_port="$2"
   local remote_port="${3:-$2}"
+  local log_file="/tmp/pf-${service_name}-${local_port}.log"
+  local local_url="http://127.0.0.1:${local_port}"
 
-  # Kill any existing port-forward on this port
-  fuser -k "${local_port}/tcp" >/dev/null 2>&1 || true
+  # Kill any stale port-forward on this port
+  pkill -f "port-forward.*${local_port}:" >/dev/null 2>&1 || true
+  sleep 1
 
-  kubectl -n "$ENVIRONMENT" port-forward "svc/${service_name}" "${local_port}:${remote_port}" --address 127.0.0.1 >/tmp/${service_name}-${local_port}.log 2>&1 &
-  PORT_FORWARD_PIDS+=("$!")
-  wait_for_health "http://127.0.0.1:${local_port}"
-  echo "http://127.0.0.1:${local_port}"
-}
+  echo "=== Starting port-forward: ${service_name} -> ${local_url} ===" >&2
+  kubectl -n "$ENVIRONMENT" port-forward \
+    "svc/${service_name}" "${local_port}:${remote_port}" \
+    --address 127.0.0.1 \
+    >"$log_file" 2>&1 &
 
-export AUTH_BASE_URL="$(svc_url circleguard-auth-service 18080)"
-export IDENTITY_BASE_URL="$(svc_url circleguard-identity-service 18081)"
-export PROMOTION_BASE_URL="$(svc_url circleguard-promotion-service 18082 8081)"
-export GATEWAY_BASE_URL="$(svc_url circleguard-gateway-service 18083)"
-export DASHBOARD_BASE_URL="$(svc_url circleguard-dashboard-service 18084)"
-export FILE_BASE_URL="$(svc_url circleguard-file-service 18085)"
+  local pid=$!
+  # Write PID to file so the parent process can clean it up
+  echo "$pid" >> "$PF_PID_FILE"
 
-export QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.qr_secret}' | base64 --decode)"
-
-# Verify all port-forwards are still alive before running tests
-echo "=== Verifying port-forwards are active ==="
-for url in "$IDENTITY_BASE_URL" "$PROMOTION_BASE_URL" "$GATEWAY_BASE_URL" "$FILE_BASE_URL"; do
-  if ! curl -fsS "${url}/actuator/health" >/dev/null 2>&1; then
-    echo "ERROR: port-forward to ${url} is not responding"
+  if ! wait_for_health "$local_url"; then
+    echo "=== Port-forward log for ${service_name} ===" >&2
+    cat "$log_file" >&2 || true
     exit 1
   fi
+
+  # Only stdout: the URL (captured by $() callers)
+  echo "$local_url"
+}
+
+AUTH_BASE_URL="$(start_port_forward circleguard-auth-service 18080)"
+IDENTITY_BASE_URL="$(start_port_forward circleguard-identity-service 18081)"
+PROMOTION_BASE_URL="$(start_port_forward circleguard-promotion-service 18082 8081)"
+GATEWAY_BASE_URL="$(start_port_forward circleguard-gateway-service 18083)"
+DASHBOARD_BASE_URL="$(start_port_forward circleguard-dashboard-service 18084)"
+FILE_BASE_URL="$(start_port_forward circleguard-file-service 18085)"
+
+export AUTH_BASE_URL IDENTITY_BASE_URL PROMOTION_BASE_URL GATEWAY_BASE_URL DASHBOARD_BASE_URL FILE_BASE_URL
+
+# Sanity-check: all required URLs must be non-empty
+echo "=== Port-forward URLs ==="
+for var in IDENTITY_BASE_URL PROMOTION_BASE_URL GATEWAY_BASE_URL FILE_BASE_URL; do
+  val="${!var}"
+  if [[ -z "$val" ]]; then
+    echo "ERROR: ${var} is empty — port-forward failed silently"
+    exit 1
+  fi
+  echo "  ${var}=${val}"
 done
-echo "All port-forwards active"
+
+# Final liveness check: verify each port-forward is still responding
+echo "=== Verifying port-forwards are still active ==="
+for var in IDENTITY_BASE_URL PROMOTION_BASE_URL GATEWAY_BASE_URL FILE_BASE_URL; do
+  url="${!var}"
+  if ! curl -fsS "${url}/actuator/health" >/dev/null 2>&1; then
+    echo "ERROR: port-forward to ${url} dropped — cannot run tests"
+    exit 1
+  fi
+  echo "  OK: ${url}"
+done
+
+export QR_SECRET
+QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.qr_secret}' | base64 --decode)"
+
+echo "=== All port-forwards active — running E2E tests ==="
 
 ./gradlew :tests:circleguard-e2e-tests:test \
   -DIDENTITY_BASE_URL="$IDENTITY_BASE_URL" \
