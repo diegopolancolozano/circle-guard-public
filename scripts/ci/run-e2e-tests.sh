@@ -16,11 +16,11 @@ trap cleanup EXIT
 
 wait_for_health() {
   local local_url="$1"
-  for attempt in $(seq 1 60); do
+  for attempt in $(seq 1 150); do
     if curl -fsS "$local_url/actuator/health" >/dev/null 2>&1; then
       return 0
     fi
-    sleep 2
+    sleep 3
   done
   echo "ERROR: port-forward at ${local_url} did not become ready"
   exit 1
