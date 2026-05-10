@@ -120,7 +120,11 @@ class CircleguardE2ETest {
     }
 
     private static String requiredEnv(String key) {
-        String value = System.getenv(key);
+        // Check System properties first (from -D gradle args), then fall back to environment variables
+        String value = System.getProperty(key);
+        if (value == null || value.isBlank()) {
+            value = System.getenv(key);
+        }
         Assumptions.assumeTrue(value != null && !value.isBlank(), () -> key + " no está definido");
         return value.replaceAll("/+$", "");
     }

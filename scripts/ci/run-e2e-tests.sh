@@ -46,4 +46,8 @@ export FILE_BASE_URL="$(svc_url circleguard-file-service 18085)"
 
 export QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.qr_secret}' | base64 --decode)"
 
-./gradlew :tests:circleguard-e2e-tests:test
+./gradlew :tests:circleguard-e2e-tests:test \
+  -DIDENTITY_BASE_URL="$IDENTITY_BASE_URL" \
+  -DPROMOTION_BASE_URL="$PROMOTION_BASE_URL" \
+  -DGATEWAY_BASE_URL="$GATEWAY_BASE_URL" \
+  -DFILE_BASE_URL="$FILE_BASE_URL"
