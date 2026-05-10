@@ -28,17 +28,10 @@ spec:
             - secretRef:
                 name: app-config
           env:
-            - name: JAVA_OPTS
-              value: "-XX:TieredStopAtLevel=1 -Xms256m -Xmx512m"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
             - name: SPRING_JPA_OPEN_IN_VIEW
               value: "false"
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "250m"
-            limits:
-              memory: "768Mi"
-              cpu: "1000m"
           startupProbe:
             httpGet:
               path: /actuator/health
@@ -106,15 +99,8 @@ spec:
                 secretKeyRef:
                   name: qr-secret
                   key: qr_secret
-            - name: JAVA_OPTS
-              value: "-XX:TieredStopAtLevel=1 -Xms256m -Xmx512m"
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "250m"
-            limits:
-              memory: "768Mi"
-              cpu: "1000m"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
           startupProbe:
             httpGet:
               path: /actuator/health
@@ -177,15 +163,8 @@ spec:
             - secretRef:
                 name: app-config
           env:
-            - name: JAVA_OPTS
-              value: "-XX:TieredStopAtLevel=1 -Xms256m -Xmx512m"
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "250m"
-            limits:
-              memory: "768Mi"
-              cpu: "1000m"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
           startupProbe:
             httpGet:
               path: /actuator/health
@@ -253,15 +232,8 @@ spec:
                 secretKeyRef:
                   name: qr-secret
                   key: qr_secret
-            - name: JAVA_OPTS
-              value: "-XX:TieredStopAtLevel=1 -Xms256m -Xmx512m"
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "250m"
-            limits:
-              memory: "768Mi"
-              cpu: "1000m"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
           startupProbe:
             httpGet:
               path: /actuator/health
@@ -324,15 +296,8 @@ spec:
             - secretRef:
                 name: app-config
           env:
-            - name: JAVA_OPTS
-              value: "-XX:TieredStopAtLevel=1 -Xms256m -Xmx512m"
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "250m"
-            limits:
-              memory: "768Mi"
-              cpu: "1000m"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
           startupProbe:
             httpGet:
               path: /actuator/health
@@ -395,15 +360,8 @@ spec:
             - secretRef:
                 name: app-config
           env:
-            - name: JAVA_OPTS
-              value: "-XX:TieredStopAtLevel=1 -Xms256m -Xmx512m"
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "250m"
-            limits:
-              memory: "768Mi"
-              cpu: "1000m"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
           startupProbe:
             httpGet:
               path: /actuator/health
