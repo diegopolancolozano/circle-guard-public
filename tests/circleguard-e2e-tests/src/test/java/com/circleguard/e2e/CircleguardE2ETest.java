@@ -77,23 +77,26 @@ class CircleguardE2ETest {
 
     @Test
     void shouldUploadFile() {
-        File tempFile = new File("e2e-upload.txt");
+        File tempFile;
         try {
+            tempFile = File.createTempFile("e2e-upload", ".txt");
             java.nio.file.Files.writeString(tempFile.toPath(), "e2e-content");
         } catch (java.io.IOException e) {
             throw new RuntimeException(e);
         }
 
-        given()
-                .baseUri(fileBaseUrl)
-                .multiPart("file", tempFile, "text/plain")
-        .when()
-                .post("/api/v1/files/upload")
-        .then()
-                .statusCode(200)
-                .body("filename", notNullValue());
-
-        tempFile.delete();
+        try {
+            given()
+                    .baseUri(fileBaseUrl)
+                    .multiPart("file", tempFile, "text/plain")
+            .when()
+                    .post("/api/v1/files/upload")
+            .then()
+                    .statusCode(200)
+                    .body("filename", notNullValue());
+        } finally {
+            tempFile.delete();
+        }
     }
 
     @Test
