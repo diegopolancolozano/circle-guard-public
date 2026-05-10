@@ -4,6 +4,7 @@ metadata:
   name: postgres
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app: postgres
@@ -43,6 +44,7 @@ metadata:
   name: neo4j
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app: neo4j
@@ -93,6 +95,7 @@ metadata:
   name: redis
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app: redis
@@ -125,6 +128,7 @@ metadata:
   name: zookeeper
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app: zookeeper
@@ -160,6 +164,7 @@ metadata:
   name: kafka
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app: kafka
@@ -215,6 +220,7 @@ metadata:
   name: openldap
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app: openldap
