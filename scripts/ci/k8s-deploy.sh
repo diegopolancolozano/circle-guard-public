@@ -27,6 +27,10 @@ fi
 
 kubectl apply -f k8s/namespaces.yaml --validate=false
 
+# Scale down heavy infra immediately to free RAM before anything else
+echo "=== Scaling down heavy infra (neo4j, openldap) to free RAM ==="
+kubectl -n "$ENVIRONMENT" scale deployment neo4j openldap --replicas=0 --ignore-not-found 2>/dev/null || true
+
 # Force redeploy if requested
 if [ "$FORCE_REDEPLOY" = "true" ]; then
   echo "=== FORCE_REDEPLOY=true, cleaning up existing deployments ==="
@@ -37,6 +41,11 @@ fi
 echo "=== Cleaning up failed pods in ${ENVIRONMENT} ==="
 kubectl -n "$ENVIRONMENT" delete pods --field-selector=status.phase==Failed --ignore-not-found || true
 kubectl -n "$ENVIRONMENT" delete pods --field-selector=status.phase==Unknown --ignore-not-found || true
+
+# Delete pods in Error state (stale from previous runs)
+kubectl -n "$ENVIRONMENT" get pods --no-headers 2>/dev/null \
+  | awk '$3 == "Error" || $3 == "CrashLoopBackOff" || $3 == "OOMKilled" {print $1}' \
+  | xargs -r kubectl -n "$ENVIRONMENT" delete pod --grace-period=0 --force --ignore-not-found 2>/dev/null || true
 
 # Delete pods with excessive restarts (more than 10)
 for pod in $(kubectl -n "$ENVIRONMENT" get pods --no-headers 2>/dev/null | awk '$4 > 10 {print $1}' || true); do
