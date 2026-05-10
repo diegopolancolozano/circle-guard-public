@@ -9,6 +9,22 @@ export KUBECONFIG="${KUBECONFIG:-/var/jenkins_home/.kube/config}"
 echo "Using kube context: $(kubectl config current-context 2>/dev/null || true)"
 echo "Using kube server: $(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
 
+K8S_READY=false
+for attempt in $(seq 1 12); do
+  if kubectl version --request-timeout=10s >/dev/null 2>&1; then
+    K8S_READY=true
+    break
+  fi
+  echo "Kubernetes API not ready (attempt ${attempt}/12). Retrying in 5s..."
+  sleep 5
+done
+
+if [ "$K8S_READY" != "true" ]; then
+  echo "ERROR: Kubernetes is not reachable from this machine/container."
+  echo "ERROR: Start Docker Desktop Kubernetes or fix the kube context before deploying ${ENVIRONMENT}."
+  exit 1
+fi
+
 kubectl apply -f k8s/namespaces.yaml --validate=false
 
 # Force redeploy if requested
