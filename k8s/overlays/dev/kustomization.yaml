@@ -1,6 +1,8 @@
 namespace: dev
 resources:
   - ../../base
+patchesStrategicMerge:
+  - ../stage/scale-down-heavy-infra.yaml
 
 images:
   - name: diegoapolancol/circleguard-auth-service
