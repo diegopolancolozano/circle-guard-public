@@ -3,6 +3,7 @@ resources:
   - ../../base
 patchesStrategicMerge:
   - imagepullpolicy-patch.yaml
+  - scale-down-heavy-infra.yaml
 
 images:
   - name: diegoapolancol/circleguard-auth-service
