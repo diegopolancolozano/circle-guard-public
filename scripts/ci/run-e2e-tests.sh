@@ -22,7 +22,7 @@ trap cleanup EXIT
 # Wait up to 7.5 minutes for a health endpoint to respond
 wait_for_health() {
   local local_url="$1"
-  local max_attempts=150
+  local max_attempts=30
   local sleep_secs=3
   local attempt
 
@@ -75,12 +75,12 @@ start_port_forward() {
   echo "$local_url"
 }
 
-AUTH_BASE_URL="$(start_port_forward circleguard-auth-service 18080)"
-IDENTITY_BASE_URL="$(start_port_forward circleguard-identity-service 18081)"
+AUTH_BASE_URL="$(start_port_forward circleguard-auth-service 18080 8080)"
+IDENTITY_BASE_URL="$(start_port_forward circleguard-identity-service 18081 8080)"
 PROMOTION_BASE_URL="$(start_port_forward circleguard-promotion-service 18082 8081)"
-GATEWAY_BASE_URL="$(start_port_forward circleguard-gateway-service 18083)"
-DASHBOARD_BASE_URL="$(start_port_forward circleguard-dashboard-service 18084)"
-FILE_BASE_URL="$(start_port_forward circleguard-file-service 18085)"
+GATEWAY_BASE_URL="$(start_port_forward circleguard-gateway-service 18083 8080)"
+DASHBOARD_BASE_URL="$(start_port_forward circleguard-dashboard-service 18084 8080)"
+FILE_BASE_URL="$(start_port_forward circleguard-file-service 18085 8080)"
 
 export AUTH_BASE_URL IDENTITY_BASE_URL PROMOTION_BASE_URL GATEWAY_BASE_URL DASHBOARD_BASE_URL FILE_BASE_URL
 
