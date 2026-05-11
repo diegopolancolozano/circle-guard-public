@@ -136,18 +136,22 @@ ls -la "${LOCUST_DIR}" || true
 echo "[Locust] Testing docker mount for ${LOCUST_DIR}"
 if docker run --rm -v "${LOCUST_DIR}:/mnt/performance" busybox ls /mnt/performance/locustfile.py >/dev/null 2>&1; then
   echo "[Locust] Docker mount succeeded - running via docker run"
+  CSV_BASENAME="${RESULTS_DIR}/locust-${ENVIRONMENT}-${TIMESTAMP}"
   docker run --rm \
     -e IDENTITY_BASE_URL="$IDENTITY_BASE_URL" \
     -e GATEWAY_BASE_URL="$GATEWAY_BASE_URL" \
     -e QR_SECRET="$QR_SECRET" \
     -v "${LOCUST_DIR}:/mnt/performance" \
+    -v "${RESULTS_DIR}:/tmp/results" \
     locustio/locust:2.24.1 \
     -f /mnt/performance/locustfile.py \
     --headless \
     --users "$USERS" \
     --spawn-rate "$SPAWN_RATE" \
     --run-time "$RUN_TIME" \
-    --host "$GATEWAY_BASE_URL" | tee "$RESULT_LOG"
+    --host "$GATEWAY_BASE_URL" \
+    --csv="/tmp/results/locust-${TIMESTAMP}" | tee "$RESULT_LOG"
+  echo "[Locust] CSV reports saved to ${RESULTS_DIR}/locust-${TIMESTAMP}*"
 else
   echo "[Locust] Docker mount test failed - using K8s fallback"
   IDENTITY_BASE_URL="http://circleguard-identity-service:8080"
