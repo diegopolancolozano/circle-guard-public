@@ -9,6 +9,7 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import com.circleguard.auth.service.CustomUserDetailsService;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -35,6 +36,9 @@ public class LoginControllerTest {
 
     @MockBean
     private IdentityClient identityClient;
+
+        @MockBean
+        private CustomUserDetailsService userDetailsService;
 
     @Test
     void shouldLoginSuccessfullyAndReturnAnonymizedToken() throws Exception {
