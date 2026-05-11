@@ -47,9 +47,12 @@ pipeline {
             }
         }
 
-        stage("Build & Unit Tests") {
+        stage("Build & Test") {
             steps {
-                sh "./gradlew clean :services:circleguard-auth-service:bootJar :services:circleguard-identity-service:bootJar :services:circleguard-promotion-service:bootJar :services:circleguard-gateway-service:bootJar :services:circleguard-dashboard-service:bootJar :services:circleguard-file-service:bootJar -x test"
+                // Run all tests (unit + integration)
+                sh "./gradlew clean test --info"
+                // Build bootJar for all services
+                sh "./gradlew :services:circleguard-auth-service:bootJar :services:circleguard-identity-service:bootJar :services:circleguard-promotion-service:bootJar :services:circleguard-gateway-service:bootJar :services:circleguard-dashboard-service:bootJar :services:circleguard-file-service:bootJar"
             }
         }
 
