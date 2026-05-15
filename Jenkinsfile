@@ -24,36 +24,7 @@ pipeline {
     agent any
 
     parameters {
-        choice(
-            name: 'PIPELINE_MODE',
-            choices: ['reduced', 'full'],
-            description: 'reduced = build + tests only; full = deploy + smoke/perf/release flow'
-        )
-        choice(
-            name: 'CLOUD_TARGET',
-            choices: ['gcp', 'digitalocean', 'local', 'multi'],
-            description: 'Target cloud for full mode. multi = run DO + GCP sequentially (two builds).'
-        )
-        string(
-            name: 'GCP_PROJECT',
-            defaultValue: '',
-            description: '(GCP only) GCP project ID. Leave blank to use the value set in Resolve Cloud Target.'
-        )
-        string(
-            name: 'GKE_CLUSTER_NAME',
-            defaultValue: '',
-            description: '(GCP only) GKE cluster name. Leave blank to use the per-environment default.'
-        )
-        string(
-            name: 'GKE_CLUSTER_LOCATION',
-            defaultValue: 'us-central1',
-            description: '(GCP only) GKE cluster region/zone.'
-        )
-        string(
-            name: 'TEARDOWN_AFTER_MINUTES',
-            defaultValue: '5',
-            description: 'Minutes to wait before scaling dev/stage to zero. Use 0 to keep running.'
-        )
+        string(name: 'TEARDOWN_AFTER_MINUTES', defaultValue: '5', description: 'Minutes to wait before tearing down deployed environment. Use 0 to prompt manually and keep it running until teardown is scheduled.')
     }
 
     options {
@@ -63,10 +34,11 @@ pipeline {
     }
 
     environment {
-        DOCKER_IMAGE_PREFIX    = "diegoapolancol/circleguard"
-        DOCKER_CREDENTIALS_ID  = "dockerhub-credentials"
-        DOCKERHUB_EMAIL        = "devops@circleguard.local"
-        GCP_SA_CREDENTIALS_ID  = "gcp-sa-credentials"
+        DOCKER_IMAGE_PREFIX = "diegopolancolozano/circleguard"
+        DOCKER_CREDENTIALS_ID = "dockerhub-credentials"
+        KUBECONFIG_CREDENTIALS_ID = "kubeconfig-credentials"
+        QR_SECRET_CREDENTIALS_ID = "qr-secret-value"
+        DOCKERHUB_EMAIL = "devops@circleguard.local"
     }
 
     stages {
@@ -194,16 +166,19 @@ pipeline {
                 script {
                     def raw = (params.TEARDOWN_AFTER_MINUTES ?: '0').trim()
                     if (raw == '0') {
-                        def isManual = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause') as boolean
-                        if (isManual) {
-                            def ans = input(
-                                message: "Minutes before teardown for '${env.DEPLOY_ENV}'?",
-                                parameters: [string(name: 'MINUTES', defaultValue: '5')]
-                            )
+                        def manualCauses = []
+                        try {
+                            manualCauses = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
+                        } catch (ignored) {
+                            manualCauses = []
+                        }
+
+                        if (manualCauses) {
+                            def ans = input message: "¿Cuántos minutos antes de teardown para ${env.DEPLOY_ENV}?", parameters: [string(name: 'TEARDOWN_INPUT', defaultValue: '5', description: 'Minutos antes de teardown')]
                             env.TEARDOWN_AFTER_MINUTES = (ans ?: '5').trim()
                         } else {
                             env.TEARDOWN_AFTER_MINUTES = '5'
-                            echo "Non-interactive build: defaulting teardown to 5 minutes."
+                            echo "Build triggered by push or non-manual cause; defaulting teardown to 5 minutes."
                         }
                     } else {
                         env.TEARDOWN_AFTER_MINUTES = raw
@@ -220,16 +195,9 @@ pipeline {
             steps {
                 sh "./gradlew clean test jacocoTestReport --info --no-daemon"
             }
-            post {
-                always {
-                    junit testResults: "**/build/test-results/test/*.xml", allowEmptyResults: true
-                    archiveArtifacts artifacts: "**/build/reports/jacoco/test/**, **/build/reports/tests/test/**", allowEmptyArchive: true
-                }
-            }
         }
 
-        // ------------------------------------------------------------------ //
-        stage("Static Analysis (SonarQube)") {
+        stage("Build & Push Images") {
             when {
                 expression {
                     def sonarHost = (env.SONAR_HOST_URL ?: "").trim()
