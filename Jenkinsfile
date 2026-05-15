@@ -132,6 +132,28 @@ pipeline {
             }
         }
 
+        stage("Ensure Flyway Baseline") {
+            when {
+                expression { return env.DEPLOY_ENV?.trim() }
+            }
+            steps {
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    script {
+                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                            if (env.BRANCH_NAME == 'main') {
+                                echo "Setting SPRING_FLYWAY_BASELINE_ON_MIGRATE=true on 'stage' and 'prod' namespaces"
+                                sh "kubectl -n stage set env deployment --all SPRING_FLYWAY_BASELINE_ON_MIGRATE=true || true"
+                                sh "kubectl -n prod set env deployment --all SPRING_FLYWAY_BASELINE_ON_MIGRATE=true || true"
+                            } else {
+                                echo "Setting SPRING_FLYWAY_BASELINE_ON_MIGRATE=true on namespace ${env.DEPLOY_ENV}"
+                                sh "kubectl -n ${env.DEPLOY_ENV} set env deployment --all SPRING_FLYWAY_BASELINE_ON_MIGRATE=true || true"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         stage("Deploy") {
             when {
                 expression { return env.DEPLOY_ENV?.trim() }
