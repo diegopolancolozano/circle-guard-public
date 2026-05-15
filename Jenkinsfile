@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'TEARDOWN_AFTER_MINUTES', defaultValue: '0', description: 'Minutes to wait before tearing down deployed environment. Use 0 to keep it running.')
+        string(name: 'TEARDOWN_AFTER_MINUTES', defaultValue: '5', description: 'Minutes to wait before tearing down deployed environment. Use 0 to prompt manually and keep it running until teardown is scheduled.')
     }
 
     options {
@@ -15,9 +15,6 @@ pipeline {
         KUBECONFIG_CREDENTIALS_ID = "kubeconfig-credentials"
         QR_SECRET_CREDENTIALS_ID = "qr-secret-value"
         DOCKERHUB_EMAIL = "devops@circleguard.local"
-        GCP_PROJECT = "1026376319321"
-        GKE_CLUSTER_NAME = "circle-guard-cluster"
-        GKE_CLUSTER_LOCATION = "us-central1"
     }
 
     stages {
@@ -59,11 +56,22 @@ pipeline {
             }
             steps {
                 script {
-                    // If param was not provided (or is 0), prompt interactively for minutes
                     def raw = (params.TEARDOWN_AFTER_MINUTES ?: '0').trim()
                     if (raw == '0') {
-                        def ans = input message: "¿Cuántos minutos antes de teardown para ${env.DEPLOY_ENV}?", parameters: [string(name: 'TEARDOWN_INPUT', defaultValue: '5', description: 'Minutos antes de teardown')]
-                        env.TEARDOWN_AFTER_MINUTES = ans?.trim()
+                        def manualCauses = []
+                        try {
+                            manualCauses = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
+                        } catch (ignored) {
+                            manualCauses = []
+                        }
+
+                        if (manualCauses) {
+                            def ans = input message: "¿Cuántos minutos antes de teardown para ${env.DEPLOY_ENV}?", parameters: [string(name: 'TEARDOWN_INPUT', defaultValue: '5', description: 'Minutos antes de teardown')]
+                            env.TEARDOWN_AFTER_MINUTES = (ans ?: '5').trim()
+                        } else {
+                            env.TEARDOWN_AFTER_MINUTES = '5'
+                            echo "Build triggered by push or non-manual cause; defaulting teardown to 5 minutes."
+                        }
                     } else {
                         env.TEARDOWN_AFTER_MINUTES = raw
                     }
@@ -75,31 +83,6 @@ pipeline {
         stage("Build & Integration Tests") {
             steps {
                 sh "./gradlew clean test --info"
-            }
-        }
-
-        stage("Terraform Bootstrap K8s") {
-            when {
-                expression { return env.IMAGE_TAGS?.trim() }
-            }
-            steps {
-                withCredentials([
-                    usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD"),
-                    file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG"),
-                    string(credentialsId: env.QR_SECRET_CREDENTIALS_ID, variable: "QR_SECRET"),
-                    // GCP service account JSON (Secret file in Jenkins credentials)
-                    file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')
-                ]) {
-                    // Expose GCP vars to the script; configure them in the job (or as global env)
-                    withCredentials([
-                        usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD"),
-                        file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG"),
-                        string(credentialsId: env.QR_SECRET_CREDENTIALS_ID, variable: "QR_SECRET"),
-                        file(credentialsId: 'gcp-sa-json', variable: 'GCP_SA_FILE')
-                    ]) {
-                        sh "scripts/ci/terraform-bootstrap.sh"
-                    }
-                }
             }
         }
 
