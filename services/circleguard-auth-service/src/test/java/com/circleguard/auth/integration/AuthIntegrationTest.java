@@ -1,6 +1,7 @@
 package com.circleguard.auth.integration;
 
 import com.circleguard.auth.client.IdentityClient;
+import com.circleguard.auth.service.CustomUserDetailsService;
 import com.circleguard.auth.service.JwtTokenService;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -36,6 +37,9 @@ public class AuthIntegrationTest {
 
     @MockBean
     private IdentityClient identityClient;
+
+    @MockBean
+    private CustomUserDetailsService userDetailsService;
 
     @Test
     void loginFlow_returnsTokenAndAnonymousId() throws Exception {
