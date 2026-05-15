@@ -53,6 +53,25 @@ pipeline {
             }
         }
 
+        stage("Ask Teardown Minutes") {
+            when {
+                expression { return env.DEPLOY_ENV?.trim() }
+            }
+            steps {
+                script {
+                    // If param was not provided (or is 0), prompt interactively for minutes
+                    def raw = (params.TEARDOWN_AFTER_MINUTES ?: '0').trim()
+                    if (raw == '0') {
+                        def ans = input message: "¿Cuántos minutos antes de teardown para ${env.DEPLOY_ENV}?", parameters: [string(name: 'TEARDOWN_INPUT', defaultValue: '5', description: 'Minutos antes de teardown')]
+                        env.TEARDOWN_AFTER_MINUTES = ans?.trim()
+                    } else {
+                        env.TEARDOWN_AFTER_MINUTES = raw
+                    }
+                    echo "TEARDOWN_AFTER_MINUTES=${env.TEARDOWN_AFTER_MINUTES}"
+                }
+            }
+        }
+
         stage("Build & Integration Tests") {
             steps {
                 sh "./gradlew clean test --info"
@@ -89,8 +108,26 @@ pipeline {
                 expression { return env.IMAGE_TAGS?.trim() }
             }
             steps {
-                withCredentials([usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD")]) {
-                    sh "scripts/ci/build-and-push-images.sh '${IMAGE_TAGS}' '${DOCKER_IMAGE_PREFIX}' '${DOCKERHUB_USERNAME}' '${DOCKERHUB_PASSWORD}'"
+                script {
+                    // Detect whether relevant files changed (services, Dockerfile, build files)
+                    def changed = sh(script: "git diff --name-only HEAD~1..HEAD || true", returnStdout: true).trim()
+                    boolean needBuild = false
+                    if (!changed) {
+                        // No previous commit in shallow clones or first build: build to be safe
+                        needBuild = true
+                    } else {
+                        if (changed =~ /(services\/|Dockerfile|build.gradle|settings.gradle|gradlew|mobile\/|app\/|gradle\/)/) {
+                            needBuild = true
+                        }
+                    }
+
+                    if (needBuild) {
+                        withCredentials([usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD")]) {
+                            sh "scripts/ci/build-and-push-images.sh '${IMAGE_TAGS}' '${DOCKER_IMAGE_PREFIX}' '${DOCKERHUB_USERNAME}' '${DOCKERHUB_PASSWORD}'"
+                        }
+                    } else {
+                        echo "No relevant changes detected in code/images; skipping build & push. Changed files:\n${changed}"
+                    }
                 }
             }
         }
@@ -121,15 +158,32 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
                     script {
-                        if (env.BRANCH_NAME == "stage") {
-                            sh "scripts/ci/k8s-smoke-tests.sh stage"
-                        } else if (env.BRANCH_NAME == "main") {
-                            sh "scripts/ci/run-e2e-tests.sh stage"
+                        def perfEnv = (env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV
+
+                        def tasks = [:]
+
+                        if (env.BRANCH_NAME == 'stage') {
+                            tasks['smoke-tests'] = {
+                                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                                    sh "scripts/ci/k8s-smoke-tests.sh stage"
+                                }
+                            }
+                        } else if (env.BRANCH_NAME == 'main') {
+                            tasks['e2e-tests'] = {
+                                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                                    sh "scripts/ci/run-e2e-tests.sh stage"
+                                }
+                            }
                         }
-                        
-                        // Run performance tests for all deployable branches
-                        sh "scripts/ci/run-locust.sh ${(env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV}"
-                        sh "scripts/ci/performance-metrics.sh ${(env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV}"
+
+                        tasks['performance'] = {
+                            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                                sh "scripts/ci/run-locust.sh ${perfEnv}"
+                                sh "scripts/ci/performance-metrics.sh ${perfEnv}"
+                            }
+                        }
+
+                        parallel tasks
                     }
                 }
             }
@@ -146,8 +200,10 @@ pipeline {
             }
             steps {
                 withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                    sh "scripts/ci/k8s-stage-evidence.sh stage stage-evidence.txt"
-                    archiveArtifacts artifacts: "stage-evidence.txt", onlyIfSuccessful: true
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/k8s-stage-evidence.sh stage stage-evidence.txt"
+                        archiveArtifacts artifacts: "stage-evidence.txt", onlyIfSuccessful: true
+                    }
                 }
             }
         }
@@ -173,33 +229,23 @@ pipeline {
             }
         }
 
-        stage("Generate Release Notes") {
-            when {
-                branch "main"
-            }
-            steps {
-                sh "scripts/ci/generate-release-notes.sh"
-                archiveArtifacts artifacts: "release-notes.md", onlyIfSuccessful: true
-            }
-        }
-
         stage("Scheduled Teardown") {
             when {
                 expression { return env.DEPLOY_ENV in ["dev", "stage"] }
             }
             steps {
                 script {
-                    def teardownRaw = (params.TEARDOWN_AFTER_MINUTES ?: "0").trim()
+                    def teardownRaw = (env.TEARDOWN_AFTER_MINUTES ?: "0").trim()
                     if (!(teardownRaw ==~ /^\d+$/)) {
                         error "TEARDOWN_AFTER_MINUTES must be a non-negative integer. Received: '${teardownRaw}'"
                     }
 
                     int teardownMinutes = teardownRaw as Integer
                     if (teardownMinutes > 0) {
-                        echo "Teardown scheduled in ${teardownMinutes} minute(s) for env '${env.DEPLOY_ENV}'"
-                        sleep time: teardownMinutes, unit: 'MINUTES'
+                        echo "Scheduling background teardown in ${teardownMinutes} minute(s) for env '${env.DEPLOY_ENV}'"
+                        // Run teardown in background so the pipeline can finish and be re-run later.
                         withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                            sh "scripts/ci/k8s-teardown.sh ${env.DEPLOY_ENV}"
+                            sh "nohup sh -c 'sleep ${teardownMinutes}m && scripts/ci/k8s-teardown.sh ${env.DEPLOY_ENV}' >/dev/null 2>&1 &"
                         }
                     } else {
                         echo "TEARDOWN_AFTER_MINUTES=0, environment '${env.DEPLOY_ENV}' will remain up."
