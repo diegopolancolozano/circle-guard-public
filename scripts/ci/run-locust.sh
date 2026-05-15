@@ -35,7 +35,7 @@ trap cleanup EXIT
 
 wait_for_health() {
   local local_url="$1"
-  for attempt in $(seq 1 30); do
+  for attempt in $(seq 1 45); do
     if curl -fsS "$local_url/actuator/health" >/dev/null 2>&1; then
       return 0
     fi
@@ -45,11 +45,18 @@ wait_for_health() {
   return 1
 }
 
+wait_for_deployment() {
+  local service_name="$1"
+  echo "Waiting for deployment/${service_name} to be Available in namespace ${ENVIRONMENT}" >&2
+  kubectl -n "$ENVIRONMENT" wait --for=condition=Available "deployment/${service_name}" --timeout=180s
+}
+
 svc_url() {
   local service_name="$1"
   local local_port="$2"
   local remote_port="${3:-$2}"
 
+  wait_for_deployment "$service_name"
   kubectl -n "$ENVIRONMENT" port-forward "svc/${service_name}" "${local_port}:${remote_port}" --address 127.0.0.1 >/tmp/${service_name}-${local_port}.log 2>&1 &
   PORT_FORWARD_PIDS+=("$!")
   wait_for_health "http://127.0.0.1:${local_port}"
