@@ -5,7 +5,7 @@ locals {
     "cloudresourcemanager.googleapis.com",
     "serviceusage.googleapis.com"
   ]
-//
+
   startup_profiles = {
     jenkins = <<-EOT
       #!/usr/bin/env bash
@@ -26,7 +26,7 @@ locals {
       echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list
 
       apt-get update
-      apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin kubectl openjdk-21-jre jenkins
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin kubectl openjdk-17-jre jenkins
 
       usermod -aG docker ${var.ssh_user}
       usermod -aG docker jenkins
