@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import com.circleguard.auth.service.CustomUserDetailsService;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.Authentication;
@@ -37,9 +36,6 @@ public class AuthIntegrationTest {
 
     @MockBean
     private IdentityClient identityClient;
-
-    @MockBean
-    private CustomUserDetailsService userDetailsService;
 
     @Test
     void loginFlow_returnsTokenAndAnonymousId() throws Exception {
