@@ -39,6 +39,12 @@ wait_for_health() {
   return 1
 }
 
+wait_for_deployment() {
+  local service_name="$1"
+  echo "=== Waiting for deployment/${service_name} to be Available in namespace ${ENVIRONMENT} ===" >&2
+  kubectl -n "$ENVIRONMENT" wait --for=condition=Available "deployment/${service_name}" --timeout=180s
+}
+
 # Start a port-forward, register its PID in the PID file, wait for health.
 # Prints the local URL to stdout (safe to use in $() without losing the PID).
 start_port_forward() {
@@ -47,6 +53,8 @@ start_port_forward() {
   local remote_port="${3:-$2}"
   local log_file="/tmp/pf-${service_name}-${local_port}.log"
   local local_url="http://127.0.0.1:${local_port}"
+
+  wait_for_deployment "$service_name"
 
   # Kill any stale port-forward on this port
   pkill -f "port-forward.*${local_port}:" >/dev/null 2>&1 || true
