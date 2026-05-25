@@ -35,30 +35,22 @@ flowchart TD
 
 ### SonarQube
 
-- Análisis estático desde el pipeline (stage "Static Analysis (SonarQube)").
-- Se ejecuta si existen `SONAR_HOST_URL` y `SONAR_TOKEN`.
-- Se deja el stage en UNSTABLE si falla el análisis.
+- Agregar análisis estático por módulo.
+- Publicar quality gate antes de pasar a stage.
 
 ### Trivy
 
-- Escaneo de imágenes con `scripts/ci/run-trivy.sh`.
-- Reportes JSON y TXT archivados por build.
-- En la pipeline, las vulnerabilidades críticas dejan el stage en estado UNSTABLE.
+- Escaneo de imágenes antes de publicar.
+- Fallar la pipeline si aparecen vulnerabilidades críticas.
 
 ### Notificaciones
 
-- Webhook en fallos o inestabilidad con `scripts/ci/notify-webhook.sh`.
-- Variable requerida: `PIPELINE_WEBHOOK_URL`.
+- Correo o chat al fallar un stage crítico.
+- Resumen de resultado al terminar el pipeline.
 
 ### Aprobaciones
 
 - Requerir aprobación explícita para `main` antes del despliegue productivo.
-
-### Versionado semántico automático
-
-- Script: `scripts/ci/semver-from-git.sh`
-- Output: `build/semver.txt` (archivado)
-- Se calcula en cada ejecución a partir de commits y tags.
 
 ## Release control
 

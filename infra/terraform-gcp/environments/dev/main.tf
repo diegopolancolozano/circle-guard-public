@@ -21,13 +21,11 @@ provider "google" {
 module "vpc" {
   source = "../../modules/vpc"
 
-  network_name            = var.network_name
-  subnet_name             = var.subnet_name
-  subnet_cidr             = var.subnet_cidr
-  pods_cidr               = "10.90.0.0/16"
-  services_cidr           = "10.91.0.0/20"
-  region                  = var.region
-  allowed_ssh_cidrs       = var.allowed_ssh_cidrs
+  network_name        = var.network_name
+  subnet_name         = var.subnet_name
+  subnet_cidr         = var.subnet_cidr
+  region              = var.region
+  allowed_ssh_cidrs   = var.allowed_ssh_cidrs
   enable_jenkins_firewall = var.enable_jenkins_firewall
 }
 

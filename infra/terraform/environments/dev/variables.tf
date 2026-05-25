@@ -1,31 +1,6 @@
 variable "kubeconfig_path" {
-  description = "Ruta al archivo kubeconfig (usar cuando use_gke = false)"
+  description = "Ruta al archivo kubeconfig"
   type        = string
-  default     = ""
-}
-
-variable "use_gke" {
-  description = "Cuando true, Terraform obtiene credenciales del cluster GKE via ADC"
-  type        = bool
-  default     = true
-}
-
-variable "gcp_project" {
-  description = "ID del proyecto GCP"
-  type        = string
-  default     = ""
-}
-
-variable "gke_cluster_name" {
-  description = "Nombre del cluster GKE"
-  type        = string
-  default     = "circleguard-stage"
-}
-
-variable "gke_cluster_location" {
-  description = "Region o zona del cluster GKE"
-  type        = string
-  default     = "us-central1"
 }
 
 variable "environments" {
@@ -55,10 +30,4 @@ variable "dockerhub_server" {
   description = "Servidor de Docker Hub"
   type        = string
   default     = "https://index.docker.io/v1/"
-}
-
-variable "qr_secret" {
-  description = "Secret compartido para firma de tokens QR"
-  type        = string
-  sensitive   = true
 }

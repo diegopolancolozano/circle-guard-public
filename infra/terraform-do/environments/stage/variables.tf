@@ -82,28 +82,3 @@ variable "node_labels" {
     env = "stage"
   }
 }
-
-# ── Jenkins Droplet ──────────────────────────────────────────────────────────
-variable "cluster_vpc_id" {
-  description = "UUID de la VPC del cluster DOKS existente. Dejar vacío para usar la VPC gestionada por el módulo vpc."
-  type        = string
-  default     = ""
-}
-
-variable "jenkins_droplet_size" {
-  description = "Tamano del Droplet para Jenkins"
-  type        = string
-  default     = "s-2vcpu-4gb"
-}
-
-variable "jenkins_ssh_public_key" {
-  description = "Clave publica SSH para acceder al Droplet Jenkins (formato OpenSSH). Dejar vacio para no configurar SSH key"
-  type        = string
-  default     = ""
-}
-
-variable "jenkins_allowed_ssh_cidrs" {
-  description = "CIDRs habilitados para SSH al Jenkins Droplet"
-  type        = list(string)
-  default     = ["0.0.0.0/0", "::/0"]
-}

@@ -24,6 +24,8 @@ pipeline {
     agent any
 
     parameters {
+        choice(name: 'PIPELINE_MODE', choices: ['reduced', 'full'], description: 'reduced = build + integration tests only; full = deploy, performance, evidence and release flow')
+        choice(name: 'CLOUD_TARGET', choices: ['local', 'digitalocean', 'gcp', 'multi'], description: 'Cloud execution target for full mode. local = kubeconfig local, digitalocean = DOKS kubeconfig, gcp = GKE kubeconfig, multi = both DO and GCP strategy')
         string(name: 'TEARDOWN_AFTER_MINUTES', defaultValue: '5', description: 'Minutes to wait before tearing down deployed environment. Use 0 to prompt manually and keep it running until teardown is scheduled.')
     }
 
@@ -63,101 +65,65 @@ pipeline {
             steps {
                 script {
                     env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'reduced').trim()
-                    env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'gcp').trim()
-
-                    switch (env.BRANCH_NAME) {
-                        case "dev":
-                            env.DEPLOY_ENV  = "dev"
-                            env.IMAGE_TAGS  = "dev"
-                            break
-                        case "stage":
-                            env.DEPLOY_ENV  = "stage"
-                            env.IMAGE_TAGS  = "stage"
-                            break
-                        case "main":
-                            env.DEPLOY_ENV  = "prod"
-                            env.IMAGE_TAGS  = "stage,prod"
-                            break
-                        default:
-                            env.DEPLOY_ENV  = ""
-                            env.IMAGE_TAGS  = ""
+                    env.CLOUD_TARGET = (params.CLOUD_TARGET ?: 'local').trim()
+                    if (env.BRANCH_NAME == "dev") {
+                        env.DEPLOY_ENV = "dev"
+                        env.IMAGE_TAGS = "dev"
+                    } else if (env.BRANCH_NAME == "stage") {
+                        env.DEPLOY_ENV = "stage"
+                        env.IMAGE_TAGS = "stage"
+                    } else if (env.BRANCH_NAME == "main") {
+                        env.DEPLOY_ENV = "prod"
+                        env.IMAGE_TAGS = "stage,prod"
+                    } else {
+                        env.DEPLOY_ENV = ""
+                        env.IMAGE_TAGS = ""
                     }
-
-                    // A unique kubeconfig file written to the workspace so it
-                    // persists across stages and is accessible to background nohup.
-                    env.KUBECONFIG_PATH = "${env.WORKSPACE}/.kubeconfig-${env.BUILD_NUMBER}"
-
-                    echo "PIPELINE_MODE=${env.PIPELINE_MODE} | CLOUD_TARGET=${env.CLOUD_TARGET} | BRANCH=${env.BRANCH_NAME} | DEPLOY_ENV=${env.DEPLOY_ENV}"
                 }
             }
         }
 
-        // ------------------------------------------------------------------ //
-        // Validate cloud target and set cloud-specific configuration.
         stage("Resolve Cloud Target") {
             steps {
                 script {
+                    echo "PIPELINE_MODE=${env.PIPELINE_MODE}"
+                    echo "CLOUD_TARGET=${env.CLOUD_TARGET}"
+
                     if (!(env.CLOUD_TARGET in ['local', 'digitalocean', 'gcp', 'multi'])) {
                         error "Invalid CLOUD_TARGET='${env.CLOUD_TARGET}'. Allowed: local, digitalocean, gcp, multi"
                     }
 
-                    // Choose kubeconfig credential ID for non-GKE clouds.
-                    switch (env.CLOUD_TARGET) {
-                        case "digitalocean":
-                            env.KUBECONFIG_CREDENTIALS_ID = "kubeconfig-do-credentials"; break
-                        case "gcp":
-                        case "multi":
-                            env.KUBECONFIG_CREDENTIALS_ID = ""; break   // GKE uses SA JSON, not kubeconfig file
-                        default:
-                            env.KUBECONFIG_CREDENTIALS_ID = "kubeconfig-credentials"
+                    if (env.PIPELINE_MODE == 'reduced' && env.CLOUD_TARGET != 'local') {
+                        echo "Reduced mode selected: cloud target is informational only; no deploy stages will run."
                     }
 
-                    // Per-environment GCP defaults (can be overridden via params).
-                    if (env.CLOUD_TARGET in ['gcp', 'multi']) {
-                        env.RESOLVED_GCP_PROJECT      = (params.GCP_PROJECT?.trim())      ?: "YOUR_GCP_PROJECT"
-                        env.RESOLVED_GKE_CLUSTER_NAME = (params.GKE_CLUSTER_NAME?.trim()) ?: "circleguard-${env.DEPLOY_ENV ?: 'stage'}"
-                        env.RESOLVED_GKE_LOCATION     = (params.GKE_CLUSTER_LOCATION?.trim()) ?: "us-central1"
-                        echo "GCP target => project=${env.RESOLVED_GCP_PROJECT} cluster=${env.RESOLVED_GKE_CLUSTER_NAME} location=${env.RESOLVED_GKE_LOCATION}"
+                    if (env.CLOUD_TARGET == 'digitalocean') {
+                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-do-credentials'
+                    } else if (env.CLOUD_TARGET == 'gcp') {
+                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-gcp-credentials'
+                    } else if (env.CLOUD_TARGET == 'local') {
+                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-credentials'
+                    } else if (env.CLOUD_TARGET == 'multi') {
+                        // Multi-cloud run: select one kubeconfig per execution. Use two runs (DO + GCP).
+                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-gcp-credentials'
                     }
 
-                    if (env.CLOUD_TARGET == 'multi') {
-                        echo "MULTI-CLOUD mode: run this pipeline twice — once with CLOUD_TARGET=digitalocean and once with CLOUD_TARGET=gcp."
-                        echo "See docs/MULTICLOUD_GCP_DO.md for the staged rollout strategy."
+                    echo "KUBECONFIG_CREDENTIALS_ID=${env.KUBECONFIG_CREDENTIALS_ID}"
+
+                    if (env.PIPELINE_MODE == 'full') {
+                        if (env.CLOUD_TARGET == 'digitalocean') {
+                            echo "Full mode on DigitalOcean: expecting DOKS kubeconfig in Jenkins credential '${env.KUBECONFIG_CREDENTIALS_ID}'."
+                        } else if (env.CLOUD_TARGET == 'gcp') {
+                            echo "Full mode on GCP: expecting GKE kubeconfig in Jenkins credential '${env.KUBECONFIG_CREDENTIALS_ID}'."
+                        } else if (env.CLOUD_TARGET == 'multi') {
+                            echo "Full mode multi-cloud (DO + GCP): run twice with CLOUD_TARGET=digitalocean and CLOUD_TARGET=gcp."
+                            echo "Use docs/MULTICLOUD_GCP_DO.md for rollout strategy and staged adoption."
+                        }
                     }
                 }
             }
         }
 
-        // ------------------------------------------------------------------ //
-        stage("Compute Version") {
-            steps {
-                script {
-                    env.RELEASE_VERSION = sh(
-                        script: "scripts/ci/semver-from-git.sh",
-                        returnStdout: true
-                    ).trim()
-                    def gitSha = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                    env.GIT_SHA = gitSha
-
-                    // Append version + SHA to image tags so every push is traceable.
-                    if (env.IMAGE_TAGS) {
-                        env.IMAGE_TAGS = "${env.IMAGE_TAGS},${env.RELEASE_VERSION}"
-                    }
-
-                    sh "mkdir -p build"
-                    writeFile file: "build/semver.txt", text: "${env.RELEASE_VERSION}\n"
-                    echo "RELEASE_VERSION=${env.RELEASE_VERSION}  GIT_SHA=${env.GIT_SHA}"
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: "build/semver.txt", allowEmptyArchive: true
-                }
-            }
-        }
-
-        // ------------------------------------------------------------------ //
-        // Prompt for teardown window (only for interactive/manual builds).
         stage("Ask Teardown Minutes") {
             when {
                 expression { return env.DEPLOY_ENV?.trim() && env.PIPELINE_MODE == 'full' }
@@ -199,26 +165,7 @@ pipeline {
 
         stage("Build & Push Images") {
             when {
-                expression {
-                    def sonarHost = (env.SONAR_HOST_URL ?: "").trim()
-                    def sonarToken = (env.SONAR_TOKEN ?: "").trim()
-                    return sonarHost && sonarToken
-                }
-            }
-            steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    sh "./gradlew sonarqube -Dsonar.host.url=${env.SONAR_HOST_URL} -Dsonar.login=${env.SONAR_TOKEN} --no-daemon"
-                }
-            }
-        }
-
-        // ------------------------------------------------------------------ //
-        // Write a kubeconfig file to WORKSPACE that survives across stages.
-        //   GCP/GKE : activate SA + gcloud get-credentials → write to KUBECONFIG_PATH
-        //   DO/local: copy the pre-built kubeconfig credential → write to KUBECONFIG_PATH
-        stage("Configure K8s Access") {
-            when {
-                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
+                expression { return env.PIPELINE_MODE == 'full' && env.IMAGE_TAGS?.trim() }
             }
             steps {
                 script {
@@ -400,7 +347,10 @@ pipeline {
         // Locust performance tests + metrics summary report.
         stage("Performance Tests") {
             when {
-                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
+                allOf {
+                    branch "stage"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
             }
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
@@ -431,7 +381,10 @@ pipeline {
         // ------------------------------------------------------------------ //
         stage("Security Scan (OWASP ZAP)") {
             when {
-                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
+                allOf {
+                    branch "main"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
             }
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
@@ -548,7 +501,7 @@ pipeline {
         // can access it after this stage — unlike withCredentials temp files.
         stage("Scheduled Teardown") {
             when {
-                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV in ['dev', 'stage'] }
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV in ["dev", "stage"] }
             }
             steps {
                 script {
