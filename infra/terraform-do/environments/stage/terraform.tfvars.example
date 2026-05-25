@@ -1,5 +1,1 @@
-k8s_version = "1.32.2-do.0"
-
-# Jenkins Droplet (opcional: pasar tu clave pública SSH)
-# jenkins_ssh_public_key = "ssh-rsa AAAA..."
-# jenkins_droplet_size   = "s-2vcpu-4gb"
+k8s_version = "1.30.1-do.0"
