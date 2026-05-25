@@ -27,40 +27,21 @@ Esta guía resume el esquema de pruebas y calidad para documentar el proyecto de
 - Ejecutar las pruebas en la pipeline por etapas.
 - Separar pruebas rápidas de pruebas costosas.
 
-Cobertura actual:
-
-- JaCoCo habilitado en subprojects (HTML + XML).
-- Reportes típicos: `services/*/build/reports/jacoco/test/`.
-
 ## OWASP ZAP / seguridad dinámica
 
-Implementación actual:
-
-- Script: `scripts/ci/run-owasp-zap.sh`
-- Reportes: `tests/security/results/zap-*.{html,json,md}`
-- Ejecutado en pipeline `full` con el servicio gateway expuesto via port-forward.
-
-Buenas prácticas recomendadas:
+Para completar la rúbrica se recomienda agregar:
 
 - una ejecución automatizada contra el ambiente `stage`,
 - reportes HTML o JSON archivados como artefactos,
 - fallos por vulnerabilidades altas o críticas.
 
-## Trivy (vulnerabilidades en contenedores)
-
-Implementación actual:
-
-- Script: `scripts/ci/run-trivy.sh`
-- Reportes: `tests/security/results/trivy-*.{json,txt}`
-- Ejecutado en pipeline `full` antes de deploy.
-
 ## SonarQube
 
-Implementación actual:
+Aunque no esté conectado todavía, el documento deja claro el flujo esperado:
 
-- Stage "Static Analysis (SonarQube)" en pipeline.
-- Requiere `SONAR_HOST_URL` y `SONAR_TOKEN`.
-- Puede integrarse con quality gate si el servidor lo configura.
+- análisis estático,
+- quality gate,
+- bloqueo de release si hay deuda crítica.
 
 ## Criterios de aceptación de calidad
 
