@@ -29,6 +29,23 @@ Our vision is a university campus where health containment speed outpaces lab co
 
 ---
 
+## 📚 Entregables y documentación
+
+- [Metodología ágil y branching](docs/AGILE_AND_BRANCHING.md)
+- [Change Management y Release Notes](docs/CHANGE_MANAGEMENT_AND_RELEASES.md)
+- [CI/CD avanzado](docs/CI_CD_ADVANCED.md)
+- [Observabilidad y seguridad](docs/OBSERVABILITY_AND_SECURITY.md)
+- [Pruebas y calidad](docs/TESTING_AND_QUALITY.md)
+- [Guion de presentación](docs/PRESENTATION_GUIDE.md)
+- [Bonificaciones sin nube](docs/BONUS_WITHOUT_CLOUD.md)
+- [Estrategia multi-cloud GCP + DO](docs/MULTICLOUD_GCP_DO.md)
+- [Arquitectura de infraestructura](docs/INFRAESTRUCTURA_ARQUITECTURA.md)
+- [Evidencia de performance](docs/PERFORMANCE_EVIDENCE.md)
+- [Pipeline y pruebas](docs/PIPELINE_AND_TESTS.md)
+- [Setup de Jenkins](docs/JENKINS_SETUP.md)
+
+---
+
 ## 🏗️ Architecture Overview
 
 CircleGuard follows a **Microservice Architecture** built on a **Hybrid Data Model**.

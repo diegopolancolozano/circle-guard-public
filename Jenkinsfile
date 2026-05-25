@@ -2,6 +2,8 @@ pipeline {
     agent any
 
     parameters {
+        choice(name: 'PIPELINE_MODE', choices: ['reduced', 'full'], description: 'reduced = build + integration tests only; full = deploy, performance, evidence and release flow')
+        choice(name: 'CLOUD_TARGET', choices: ['local', 'digitalocean', 'gcp', 'multi'], description: 'Cloud execution target for full mode. local = kubeconfig local, digitalocean = DOKS kubeconfig, gcp = GKE kubeconfig, multi = both DO and GCP strategy')
         string(name: 'TEARDOWN_AFTER_MINUTES', defaultValue: '5', description: 'Minutes to wait before tearing down deployed environment. Use 0 to prompt manually and keep it running until teardown is scheduled.')
     }
 
@@ -33,6 +35,8 @@ pipeline {
         stage("Resolve Environment") {
             steps {
                 script {
+                    env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'reduced').trim()
+                    env.CLOUD_TARGET = (params.CLOUD_TARGET ?: 'local').trim()
                     if (env.BRANCH_NAME == "dev") {
                         env.DEPLOY_ENV = "dev"
                         env.IMAGE_TAGS = "dev"
@@ -50,9 +54,50 @@ pipeline {
             }
         }
 
+        stage("Resolve Cloud Target") {
+            steps {
+                script {
+                    echo "PIPELINE_MODE=${env.PIPELINE_MODE}"
+                    echo "CLOUD_TARGET=${env.CLOUD_TARGET}"
+
+                    if (!(env.CLOUD_TARGET in ['local', 'digitalocean', 'gcp', 'multi'])) {
+                        error "Invalid CLOUD_TARGET='${env.CLOUD_TARGET}'. Allowed: local, digitalocean, gcp, multi"
+                    }
+
+                    if (env.PIPELINE_MODE == 'reduced' && env.CLOUD_TARGET != 'local') {
+                        echo "Reduced mode selected: cloud target is informational only; no deploy stages will run."
+                    }
+
+                    if (env.CLOUD_TARGET == 'digitalocean') {
+                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-do-credentials'
+                    } else if (env.CLOUD_TARGET == 'gcp') {
+                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-gcp-credentials'
+                    } else if (env.CLOUD_TARGET == 'local') {
+                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-credentials'
+                    } else if (env.CLOUD_TARGET == 'multi') {
+                        // Multi-cloud run: select one kubeconfig per execution. Use two runs (DO + GCP).
+                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-gcp-credentials'
+                    }
+
+                    echo "KUBECONFIG_CREDENTIALS_ID=${env.KUBECONFIG_CREDENTIALS_ID}"
+
+                    if (env.PIPELINE_MODE == 'full') {
+                        if (env.CLOUD_TARGET == 'digitalocean') {
+                            echo "Full mode on DigitalOcean: expecting DOKS kubeconfig in Jenkins credential '${env.KUBECONFIG_CREDENTIALS_ID}'."
+                        } else if (env.CLOUD_TARGET == 'gcp') {
+                            echo "Full mode on GCP: expecting GKE kubeconfig in Jenkins credential '${env.KUBECONFIG_CREDENTIALS_ID}'."
+                        } else if (env.CLOUD_TARGET == 'multi') {
+                            echo "Full mode multi-cloud (DO + GCP): run twice with CLOUD_TARGET=digitalocean and CLOUD_TARGET=gcp."
+                            echo "Use docs/MULTICLOUD_GCP_DO.md for rollout strategy and staged adoption."
+                        }
+                    }
+                }
+            }
+        }
+
         stage("Ask Teardown Minutes") {
             when {
-                expression { return env.DEPLOY_ENV?.trim() }
+                expression { return env.DEPLOY_ENV?.trim() && env.PIPELINE_MODE == 'full' }
             }
             steps {
                 script {
@@ -88,7 +133,7 @@ pipeline {
 
         stage("Build & Push Images") {
             when {
-                expression { return env.IMAGE_TAGS?.trim() }
+                expression { return env.PIPELINE_MODE == 'full' && env.IMAGE_TAGS?.trim() }
             }
             steps {
                 script {
@@ -117,7 +162,7 @@ pipeline {
 
         stage("Ensure Flyway Baseline") {
             when {
-                expression { return env.DEPLOY_ENV?.trim() }
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
             }
             steps {
                 withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
@@ -139,7 +184,7 @@ pipeline {
 
         stage("Deploy") {
             when {
-                expression { return env.DEPLOY_ENV?.trim() }
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
             }
             steps {
                 withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
@@ -158,7 +203,7 @@ pipeline {
 
         stage("Testing & Performance") {
             when {
-                expression { return env.DEPLOY_ENV?.trim() }
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
             }
             steps {
                 withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
@@ -201,7 +246,10 @@ pipeline {
 
         stage("Stage Evidence") {
             when {
-                branch "stage"
+                allOf {
+                    branch "stage"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
             }
             steps {
                 withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
@@ -215,7 +263,10 @@ pipeline {
 
         stage("Deploy Prod") {
             when {
-                branch "main"
+                allOf {
+                    branch "main"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
             }
             steps {
                 withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
@@ -226,7 +277,10 @@ pipeline {
 
         stage("Generate Release Notes") {
             when {
-                branch "main"
+                allOf {
+                    branch "main"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
             }
             steps {
                 sh "scripts/ci/generate-release-notes.sh"
@@ -236,7 +290,7 @@ pipeline {
 
         stage("Scheduled Teardown") {
             when {
-                expression { return env.DEPLOY_ENV in ["dev", "stage"] }
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV in ["dev", "stage"] }
             }
             steps {
                 script {
