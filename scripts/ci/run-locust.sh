@@ -126,7 +126,8 @@ export AUTH_BASE_URL="$(svc_url circleguard-auth-service 18186)"
 export IDENTITY_BASE_URL="$(svc_url circleguard-identity-service 18180)"
 export GATEWAY_BASE_URL="$(svc_url circleguard-gateway-service 18181)"
 export PROMOTION_BASE_URL="$(svc_url circleguard-promotion-service 18182 8081)"
-export QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.qr_secret}' | base64 --decode)"
+# Note: the key in the Kubernetes Secret is 'QR_SECRET' (uppercase)
+export QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.QR_SECRET}' | base64 --decode)"
 
 USERS="${USERS:-20}"
 SPAWN_RATE="${SPAWN_RATE:-4}"
