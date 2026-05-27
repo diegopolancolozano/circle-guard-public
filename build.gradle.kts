@@ -37,6 +37,8 @@ subprojects {
         "implementation"(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
         "testImplementation"(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
         "implementation"("io.micrometer:micrometer-registry-prometheus")
+        "implementation"("io.micrometer:micrometer-tracing-bridge-otel")
+        "implementation"("io.opentelemetry:opentelemetry-exporter-otlp")
         "compileOnly"("org.projectlombok:lombok")
         "annotationProcessor"("org.projectlombok:lombok")
         "testCompileOnly"("org.projectlombok:lombok")
