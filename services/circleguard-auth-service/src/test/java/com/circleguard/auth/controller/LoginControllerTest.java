@@ -1,6 +1,6 @@
 package com.circleguard.auth.controller;
 
-import com.circleguard.auth.client.IdentityClient;
+import com.circleguard.auth.service.IdentityMappingService;
 import com.circleguard.auth.service.JwtTokenService;
 import com.circleguard.auth.security.SecurityConfig;
 import org.junit.jupiter.api.Test;
@@ -35,10 +35,10 @@ public class LoginControllerTest {
     private JwtTokenService jwtService;
 
     @MockBean
-    private IdentityClient identityClient;
+    private IdentityMappingService identityMappingService;
 
-        @MockBean
-        private CustomUserDetailsService userDetailsService;
+    @MockBean
+    private CustomUserDetailsService userDetailsService;
 
     @Test
     void shouldLoginSuccessfullyAndReturnAnonymizedToken() throws Exception {
@@ -51,7 +51,7 @@ public class LoginControllerTest {
         Mockito.when(authManager.authenticate(Mockito.any(UsernamePasswordAuthenticationToken.class)))
                 .thenReturn(auth);
 
-        Mockito.when(identityClient.getAnonymousId(username)).thenReturn(anonymousId);
+        Mockito.when(identityMappingService.resolveAnonymousId(username)).thenReturn(anonymousId);
 
         Mockito.when(jwtService.generateToken(Mockito.eq(anonymousId), Mockito.any(Authentication.class)))
                 .thenReturn(token);

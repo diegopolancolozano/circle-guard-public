@@ -63,6 +63,20 @@ graph TB
     NS_DEV --> PROMOTION
 ```
 
+### 1.2 DigitalOcean (DOKS)
+
+```mermaid
+graph TB
+    subgraph "DigitalOcean"
+        DO_VPC["VPC DO<br/>10.30.0.0/16"]
+        DO_DOKS["DOKS Cluster<br/>dev/stage/prod"]
+        DO_SPACES["Spaces Bucket<br/>Terraform State"]
+    end
+
+    DO_VPC --> DO_DOKS
+    DO_SPACES --> DO_DOKS
+```
+
 ---
 
 ## 2. Estructura de Terraform (Modular)
@@ -104,6 +118,24 @@ graph TD
         K8S_STG --> DS
         K8S_PROD --> DS
     end
+
+    subgraph "infra/terraform-do/"
+        DO_DEV["environments/dev/<br/>main.tf + backend.hcl"]
+        DO_STG["environments/stage/<br/>main.tf + backend.hcl"]
+        DO_PROD["environments/prod/<br/>main.tf + backend.hcl"]
+
+        subgraph "modules/"
+            DO_VPC_M["vpc/<br/>VPC DO"]
+            DO_DOKS_M["doks-cluster/<br/>DOKS Cluster"]
+        end
+
+        DO_DEV --> DO_VPC_M
+        DO_DEV --> DO_DOKS_M
+        DO_STG --> DO_VPC_M
+        DO_STG --> DO_DOKS_M
+        DO_PROD --> DO_VPC_M
+        DO_PROD --> DO_DOKS_M
+    end
 ```
 
 ---
@@ -134,6 +166,12 @@ sequenceDiagram
     GCS-->>TF: Confirmacion
     TF-->>D: Apply completo
 ```
+
+### 3.2 Estado remoto en DigitalOcean (Spaces)
+
+- Bucket: `circleguard-tfstate-do`
+- Prefijos: `terraform-do/dev`, `terraform-do/stage`, `terraform-do/prod`
+- Backend tipo `s3` con endpoint de Spaces
 
 ---
 
@@ -180,6 +218,14 @@ sequenceDiagram
 | **stage** | `10.20.10.0/24` | Jenkins (40GB) + Runner (30GB) | `terraform-gcp/stage` |
 | **prod** | `10.20.20.0/24` | Jenkins (50GB) + Runner (40GB) | `terraform-gcp/prod` |
 
+### DigitalOcean (DOKS)
+
+| Ambiente | VPC CIDR | Cluster | State Prefix |
+|----------|----------|---------|--------------|
+| **dev** | `10.30.0.0/20` | `circleguard-dev` | `terraform-do/dev` |
+| **stage** | `10.30.16.0/20` | `circleguard-stage` | `terraform-do/stage` |
+| **prod** | `10.30.32.0/20` | `circleguard-prod` | `terraform-do/prod` |
+
 ---
 
 ## 6. Backend Remoto
@@ -202,6 +248,9 @@ Cada ambiente y cada proyecto de Terraform usa un **prefix** distinto dentro del
 | K8s Config - dev | `terraform-k8s/dev` |
 | K8s Config - stage | `terraform-k8s/stage` |
 | K8s Config - prod | `terraform-k8s/prod` |
+| DO Infra - dev | `terraform-do/dev` |
+| DO Infra - stage | `terraform-do/stage` |
+| DO Infra - prod | `terraform-do/prod` |
 
 ---
 

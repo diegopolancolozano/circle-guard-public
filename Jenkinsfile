@@ -95,6 +95,22 @@ pipeline {
             }
         }
 
+        stage("Compute Version") {
+            steps {
+                script {
+                    env.RELEASE_VERSION = sh(script: "scripts/ci/semver-from-git.sh", returnStdout: true).trim()
+                    sh "mkdir -p build"
+                    writeFile file: "build/semver.txt", text: "${env.RELEASE_VERSION}\n"
+                    echo "RELEASE_VERSION=${env.RELEASE_VERSION}"
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "build/semver.txt", allowEmptyArchive: true
+                }
+            }
+        }
+
         stage("Ask Teardown Minutes") {
             when {
                 expression { return env.DEPLOY_ENV?.trim() && env.PIPELINE_MODE == 'full' }
@@ -127,7 +143,31 @@ pipeline {
 
         stage("Build & Integration Tests") {
             steps {
-                sh "./gradlew clean test --info"
+                sh "./gradlew clean test jacocoTestReport --info"
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "**/build/reports/jacoco/test/**, **/build/reports/tests/test/**", allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage("Static Analysis (SonarQube)") {
+            when {
+                expression { return env.PIPELINE_MODE in ['reduced', 'full'] }
+            }
+            steps {
+                script {
+                    def sonarHost = (env.SONAR_HOST_URL ?: "").trim()
+                    def sonarToken = (env.SONAR_TOKEN ?: "").trim()
+                    if (sonarHost && sonarToken) {
+                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                            sh "./gradlew sonarqube -Dsonar.host.url=${sonarHost} -Dsonar.login=${sonarToken}"
+                        }
+                    } else {
+                        echo "Skipping SonarQube: SONAR_HOST_URL or SONAR_TOKEN not set."
+                    }
+                }
             }
         }
 
@@ -156,6 +196,22 @@ pipeline {
                     } else {
                         echo "No relevant changes detected in code/images; skipping build & push. Changed files:\n${changed}"
                     }
+                }
+            }
+        }
+
+        stage("Trivy Scan") {
+            when {
+                expression { return env.PIPELINE_MODE == 'full' && env.IMAGE_TAGS?.trim() }
+            }
+            steps {
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    sh "scripts/ci/run-trivy.sh '${IMAGE_TAGS}' '${DOCKER_IMAGE_PREFIX}'"
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "tests/security/results/trivy-*.json, tests/security/results/trivy-*.txt", allowEmptyArchive: true
                 }
             }
         }
@@ -244,6 +300,27 @@ pipeline {
             }
         }
 
+        stage("Security Scan (OWASP ZAP)") {
+            when {
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
+            }
+            steps {
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    script {
+                        def scanEnv = (env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV
+                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                            sh "scripts/ci/run-owasp-zap.sh ${scanEnv}"
+                        }
+                    }
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "tests/security/results/zap-*.html, tests/security/results/zap-*.json, tests/security/results/zap-*.md", allowEmptyArchive: true
+                }
+            }
+        }
+
         stage("Stage Evidence") {
             when {
                 allOf {
@@ -258,6 +335,18 @@ pipeline {
                         archiveArtifacts artifacts: "stage-evidence.txt", onlyIfSuccessful: true
                     }
                 }
+            }
+        }
+
+        stage("Approve Prod Deploy") {
+            when {
+                allOf {
+                    branch "main"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
+            }
+            steps {
+                input message: "Approve production deploy ${env.RELEASE_VERSION ?: 'unknown'}?"
             }
         }
 
@@ -311,6 +400,15 @@ pipeline {
                     }
                 }
             }
+        }
+    }
+
+    post {
+        failure {
+            sh "scripts/ci/notify-webhook.sh failure"
+        }
+        unstable {
+            sh "scripts/ci/notify-webhook.sh unstable"
         }
     }
 }
