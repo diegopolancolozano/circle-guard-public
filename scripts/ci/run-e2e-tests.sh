@@ -122,6 +122,7 @@ QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.
 echo "=== All port-forwards active — running E2E tests ==="
 
 ./gradlew :tests:circleguard-e2e-tests:test \
+  -DAUTH_BASE_URL="$AUTH_BASE_URL" \
   -DIDENTITY_BASE_URL="$IDENTITY_BASE_URL" \
   -DPROMOTION_BASE_URL="$PROMOTION_BASE_URL" \
   -DGATEWAY_BASE_URL="$GATEWAY_BASE_URL" \
