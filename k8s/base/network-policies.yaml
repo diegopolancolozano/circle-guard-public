@@ -1,0 +1,94 @@
+##############################################################################
+# Network Policies — Zero-trust pod-to-pod communication
+# Applied in dev / stage / prod namespaces via the base kustomization.
+##############################################################################
+
+# Default: deny all ingress from outside the namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# Allow intra-namespace traffic (service-to-service within the same env)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+
+---
+# Allow Prometheus (monitoring namespace) to scrape /actuator/prometheus
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+spec:
+  podSelector:
+    matchLabels: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+
+---
+# Allow Promtail / Fluent Bit (monitoring namespace) to read pod metadata
+# (No direct pod traffic needed; DaemonSet reads from hostPath /var/log)
+
+---
+# Egress: allow DNS resolution from all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# Egress: allow all outbound from circleguard services (DB, Kafka, LDAP, identity-service, etc.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - circleguard-auth-service
+          - circleguard-identity-service
+          - circleguard-promotion-service
+          - circleguard-gateway-service
+          - circleguard-dashboard-service
+          - circleguard-file-service
+  policyTypes:
+    - Egress
+  egress:
+    - {}   # permit all outbound from app pods (Kafka, PostgreSQL, Neo4j, Redis, LDAP, OTLP)

@@ -38,6 +38,8 @@ Our vision is a university campus where health containment speed outpaces lab co
 - [Pruebas y calidad](docs/TESTING_AND_QUALITY.md)
 - [Patrones de diseno](docs/DESIGN_PATTERNS.md)
 - [Manual de operaciones](docs/OPERATIONS_MANUAL.md)
+- [Chaos Engineering](docs/CHAOS_ENGINEERING.md)
+- [FinOps y costos](docs/FINOPS.md)
 - [Guion de presentación](docs/PRESENTATION_GUIDE.md)
 - [Bonificaciones sin nube](docs/BONUS_WITHOUT_CLOUD.md)
 - [Estrategia multi-cloud GCP + DO](docs/MULTICLOUD_GCP_DO.md)
