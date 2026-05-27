@@ -1,0 +1,317 @@
+// =============================================================================
+// CircleGuard — Infrastructure Pipeline (Terraform)
+//
+// This pipeline provisions or destroys cloud infrastructure.
+// It is triggered MANUALLY — NOT on every push.
+//
+// Sequence:
+//   1. GCP Auth        — activates GCP service account
+//   2. TF: GCP Infra   — VPC + GKE cluster + Jenkins VM (terraform-gcp/<env>)
+//   3. Wait for GKE    — polls until cluster is RUNNING
+//   4. TF: K8s Secrets — namespaces + Docker pull secret + QR secret (terraform/<env>)
+//
+// Required Jenkins credentials:
+//   gcp-sa-credentials     — Secret file (GCP Service Account JSON)
+//   dockerhub-credentials  — Username/Password (DockerHub)
+//
+// Required Jenkins env vars (configure in Manage Jenkins → Configure System):
+//   QR_SECRET_VALUE   — Secret text: gateway/auth shared QR signing secret
+//
+// Usage example:
+//   Trigger this pipeline manually, choose ENV=stage, ACTION=apply, CLOUD_TARGET=gcp.
+//   After it completes, run the main Jenkinsfile pipeline on the stage branch.
+// =============================================================================
+pipeline {
+    agent any
+
+    parameters {
+        choice(
+            name: 'ENV',
+            choices: ['stage', 'prod', 'dev'],
+            description: 'Target environment to provision'
+        )
+        choice(
+            name: 'ACTION',
+            choices: ['plan', 'apply', 'destroy'],
+            description: 'Terraform action. Use "plan" to preview, "apply" to provision, "destroy" to tear down.'
+        )
+        choice(
+            name: 'CLOUD_TARGET',
+            choices: ['gcp', 'digitalocean'],
+            description: 'Cloud provider target'
+        )
+        string(
+            name: 'GCP_PROJECT',
+            defaultValue: '',
+            description: '(GCP only) GCP Project ID. Overrides terraform.tfvars if set.'
+        )
+        string(
+            name: 'GKE_CLUSTER_NAME',
+            defaultValue: '',
+            description: '(GCP only) GKE cluster name. Leave blank to use the tfvars default.'
+        )
+        string(
+            name: 'GKE_CLUSTER_LOCATION',
+            defaultValue: 'us-central1',
+            description: '(GCP only) GKE cluster region.'
+        )
+        booleanParam(
+            name: 'SKIP_K8S_SECRETS',
+            defaultValue: false,
+            description: 'Skip the "TF: K8s Secrets" step (useful when the cluster already has secrets).'
+        )
+    }
+
+    options {
+        timestamps()
+        timeout(time: 60, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    environment {
+        GCP_SA_CREDENTIALS_ID = "gcp-sa-credentials"
+        TF_IN_AUTOMATION      = "true"
+        TF_INPUT              = "false"
+    }
+
+    stages {
+
+        // ------------------------------------------------------------------ //
+        stage("Checkout") {
+            steps {
+                checkout scm
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        stage("Prepare") {
+            steps {
+                sh "chmod +x scripts/ci/*.sh"
+                sh "terraform --version"
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        // Validate parameters and set per-environment defaults.
+        stage("Validate") {
+            steps {
+                script {
+                    if (!(params.ENV in ['dev', 'stage', 'prod'])) {
+                        error "Invalid ENV='${params.ENV}'"
+                    }
+                    if (!(params.ACTION in ['plan', 'apply', 'destroy'])) {
+                        error "Invalid ACTION='${params.ACTION}'"
+                    }
+                    if (params.ACTION == 'destroy' && params.ENV == 'prod') {
+                        input message: "⚠️ You are about to DESTROY the PRODUCTION environment. Are you sure?"
+                    }
+
+                    // Resolve GCP config: use params if provided, else use env-specific defaults
+                    env.RESOLVED_GCP_PROJECT  = params.GCP_PROJECT?.trim() ?: "YOUR_GCP_PROJECT"
+                    env.RESOLVED_CLUSTER_NAME = params.GKE_CLUSTER_NAME?.trim() ?: "circleguard-${params.ENV}"
+                    env.RESOLVED_CLUSTER_LOC  = params.GKE_CLUSTER_LOCATION?.trim() ?: "us-central1"
+
+                    def tfGcpDir = "infra/terraform-gcp/environments/${params.ENV}"
+                    def tfK8sDir = "infra/terraform/environments/${params.ENV}"
+                    if (!fileExists("${tfGcpDir}/terraform.tfvars")) {
+                        error "Missing ${tfGcpDir}/terraform.tfvars. Fill in the template first."
+                    }
+                    if (!fileExists("${tfK8sDir}/terraform.tfvars")) {
+                        error "Missing ${tfK8sDir}/terraform.tfvars. Fill in the template first."
+                    }
+
+                    echo "ENV=${params.ENV} | ACTION=${params.ACTION} | CLOUD_TARGET=${params.CLOUD_TARGET}"
+                    echo "GCP_PROJECT=${env.RESOLVED_GCP_PROJECT} | CLUSTER=${env.RESOLVED_CLUSTER_NAME}@${env.RESOLVED_CLUSTER_LOC}"
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        // Activate the GCP service account so all gcloud + Terraform calls work.
+        stage("GCP Auth") {
+            when {
+                expression { return params.CLOUD_TARGET == 'gcp' }
+            }
+            steps {
+                withCredentials([file(credentialsId: env.GCP_SA_CREDENTIALS_ID, variable: 'GCP_SA_FILE')]) {
+                    sh """
+                        gcloud auth activate-service-account --key-file="${GCP_SA_FILE}"
+                        gcloud config set project "${env.RESOLVED_GCP_PROJECT}"
+                        gcloud auth list
+                    """
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        // Step 1: provision VPC + GKE cluster + Jenkins VM.
+        stage("TF: GCP Infra") {
+            when {
+                expression { return params.CLOUD_TARGET == 'gcp' }
+            }
+            steps {
+                withCredentials([file(credentialsId: env.GCP_SA_CREDENTIALS_ID, variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                    script {
+                        def tfDir = "infra/terraform-gcp/environments/${params.ENV}"
+                        sh """
+                            cd "${tfDir}"
+                            terraform init -input=false -upgrade -reconfigure
+                            terraform validate
+                        """
+                        if (params.ACTION == 'plan') {
+                            sh """
+                                cd "${tfDir}"
+                                terraform plan -input=false -out=tfplan
+                            """
+                        } else if (params.ACTION == 'apply') {
+                            sh """
+                                cd "${tfDir}"
+                                terraform plan -input=false -out=tfplan
+                                terraform apply -auto-approve tfplan
+                                echo "=== Outputs ==="
+                                terraform output
+                            """
+                        } else if (params.ACTION == 'destroy') {
+                            sh """
+                                cd "${tfDir}"
+                                terraform destroy -auto-approve -input=false
+                            """
+                        }
+                    }
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "infra/terraform-gcp/environments/${params.ENV}/tfplan", allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        // Wait for the GKE cluster to reach RUNNING state before applying K8s resources.
+        stage("Wait for GKE") {
+            when {
+                allOf {
+                    expression { return params.CLOUD_TARGET == 'gcp' }
+                    expression { return params.ACTION == 'apply' }
+                }
+            }
+            steps {
+                withCredentials([file(credentialsId: env.GCP_SA_CREDENTIALS_ID, variable: 'GCP_SA_FILE')]) {
+                    script {
+                        int maxWait  = 600
+                        int elapsed  = 0
+                        String status = ""
+
+                        while (status != "RUNNING" && elapsed < maxWait) {
+                            status = sh(
+                                script: """
+                                    gcloud container clusters describe "${env.RESOLVED_CLUSTER_NAME}" \
+                                      --region="${env.RESOLVED_CLUSTER_LOC}" \
+                                      --project="${env.RESOLVED_GCP_PROJECT}" \
+                                      --format="value(status)" 2>/dev/null || echo "PENDING"
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+                            if (status == "RUNNING") {
+                                echo "GKE cluster is RUNNING."
+                                break
+                            }
+                            echo "Cluster status: ${status}. Waiting 20s... (${elapsed}s / ${maxWait}s)"
+                            sleep(20)
+                            elapsed += 20
+                        }
+
+                        if (status != "RUNNING") {
+                            error "GKE cluster '${env.RESOLVED_CLUSTER_NAME}' did not reach RUNNING within ${maxWait}s."
+                        }
+
+                        // Persist kubeconfig in workspace for K8s Secrets step
+                        sh """
+                            gcloud container clusters get-credentials "${env.RESOLVED_CLUSTER_NAME}" \
+                              --region="${env.RESOLVED_CLUSTER_LOC}" \
+                              --project="${env.RESOLVED_GCP_PROJECT}"
+                        """
+                        echo "kubeconfig updated. Context: \$(kubectl config current-context)"
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        // Step 2: create Kubernetes namespaces + pull secret + QR secret.
+        stage("TF: K8s Secrets") {
+            when {
+                expression { return !params.SKIP_K8S_SECRETS }
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: env.GCP_SA_CREDENTIALS_ID, variable: 'GOOGLE_APPLICATION_CREDENTIALS'),
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKERHUB_USERNAME',
+                        passwordVariable: 'DOCKERHUB_PASSWORD'
+                    ),
+                    string(credentialsId: 'qr-secret-value', variable: 'QR_SECRET_VALUE')
+                ]) {
+                    script {
+                        def tfDir = "infra/terraform/environments/${params.ENV}"
+
+                        // Inject sensitive vars into tfvars at runtime so they're
+                        // never stored in the repository.
+                        def extraVars = [
+                            "-var \"dockerhub_username=${DOCKERHUB_USERNAME}\"",
+                            "-var \"dockerhub_password=${DOCKERHUB_PASSWORD}\"",
+                            "-var \"dockerhub_email=devops@circleguard.local\"",
+                            "-var \"qr_secret=${QR_SECRET_VALUE}\"",
+                            "-var \"use_gke=true\"",
+                            "-var \"gcp_project=${env.RESOLVED_GCP_PROJECT}\"",
+                            "-var \"gke_cluster_name=${env.RESOLVED_CLUSTER_NAME}\"",
+                            "-var \"gke_cluster_location=${env.RESOLVED_CLUSTER_LOC}\""
+                        ].join(" ")
+
+                        sh """
+                            cd "${tfDir}"
+                            terraform init -input=false -upgrade -reconfigure
+                            terraform validate
+                        """
+
+                        if (params.ACTION == 'plan') {
+                            sh "cd \"${tfDir}\" && terraform plan -input=false ${extraVars}"
+                        } else if (params.ACTION == 'apply') {
+                            sh "cd \"${tfDir}\" && terraform apply -auto-approve -input=false ${extraVars}"
+                        } else if (params.ACTION == 'destroy') {
+                            sh "cd \"${tfDir}\" && terraform destroy -auto-approve -input=false ${extraVars}"
+                        }
+                    }
+                }
+            }
+        }
+
+    } // end stages
+
+    post {
+        success {
+            script {
+                if (params.ACTION == 'apply') {
+                    echo """
+╔══════════════════════════════════════════════════════╗
+║  Infrastructure provisioned successfully!            ║
+║                                                      ║
+║  Next steps:                                         ║
+║    1. Merge code to the '${params.ENV}' branch       ║
+║    2. Run the main Jenkinsfile CI/CD pipeline        ║
+║    3. Or apply K8s manifests manually:               ║
+║       kubectl apply -k k8s/overlays/${params.ENV}   ║
+║       kubectl apply -k k8s/monitoring                ║
+╚══════════════════════════════════════════════════════╝
+"""
+                }
+            }
+        }
+        failure {
+            sh "scripts/ci/notify-webhook.sh failure || true"
+        }
+    }
+}
