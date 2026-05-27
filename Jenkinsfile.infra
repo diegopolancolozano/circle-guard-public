@@ -264,7 +264,7 @@ pipeline {
                             "-var \"dockerhub_username=${DOCKERHUB_USERNAME}\"",
                             "-var \"dockerhub_password=${DOCKERHUB_PASSWORD}\"",
                             "-var \"dockerhub_email=devops@circleguard.local\"",
-                            "-var \"qr_secret=${QR_SECRET_VALUE}\""   // maps to k8s key 'qr_secret' (lowercase),
+                            "-var \"qr_secret=${QR_SECRET_VALUE}\"",
                             "-var \"use_gke=true\"",
                             "-var \"gcp_project=${env.RESOLVED_GCP_PROJECT}\"",
                             "-var \"gke_cluster_name=${env.RESOLVED_CLUSTER_NAME}\"",
