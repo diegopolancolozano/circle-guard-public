@@ -1,107 +1,180 @@
+// =============================================================================
+// CircleGuard — CI/CD Pipeline
+//
+// PIPELINE_MODE:
+//   reduced  → Checkout + Compile + Unit/Integration Tests + SonarQube
+//   full     → reduced + Docker push + K8s deploy + Smoke/E2E/Perf/Security
+//
+// CLOUD_TARGET (full mode only):
+//   local         → kubeconfig from Jenkins credential 'kubeconfig-credentials'
+//   digitalocean  → kubeconfig from Jenkins credential 'kubeconfig-do-credentials'
+//   gcp           → GKE auth via SA JSON credential 'gcp-sa-credentials'
+//   multi         → run the pipeline twice (once with DO, once with GCP)
+//
+// Required Jenkins credentials:
+//   dockerhub-credentials     — Username/Password (DockerHub)
+//   kubeconfig-credentials    — Secret file (kubeconfig for local/DO)
+//   kubeconfig-do-credentials — Secret file (kubeconfig for DOKS)
+//   gcp-sa-credentials        — Secret file (GCP Service Account JSON)
+//
+// Companion pipeline for infrastructure provisioning:
+//   Jenkinsfile.infra  → runs Terraform (terraform-gcp + terraform-k8s)
+// =============================================================================
 pipeline {
     agent any
 
     parameters {
-        choice(name: 'PIPELINE_MODE', choices: ['reduced', 'full'], description: 'reduced = build + integration tests only; full = deploy, performance, evidence and release flow')
-        choice(name: 'CLOUD_TARGET', choices: ['local', 'digitalocean', 'gcp', 'multi'], description: 'Cloud execution target for full mode. local = kubeconfig local, digitalocean = DOKS kubeconfig, gcp = GKE kubeconfig, multi = both DO and GCP strategy')
-        string(name: 'TEARDOWN_AFTER_MINUTES', defaultValue: '5', description: 'Minutes to wait before tearing down deployed environment. Use 0 to prompt manually and keep it running until teardown is scheduled.')
+        choice(
+            name: 'PIPELINE_MODE',
+            choices: ['reduced', 'full'],
+            description: 'reduced = build + tests only; full = deploy + smoke/perf/release flow'
+        )
+        choice(
+            name: 'CLOUD_TARGET',
+            choices: ['gcp', 'digitalocean', 'local', 'multi'],
+            description: 'Target cloud for full mode. multi = run DO + GCP sequentially (two builds).'
+        )
+        string(
+            name: 'GCP_PROJECT',
+            defaultValue: '',
+            description: '(GCP only) GCP project ID. Leave blank to use the value set in Resolve Cloud Target.'
+        )
+        string(
+            name: 'GKE_CLUSTER_NAME',
+            defaultValue: '',
+            description: '(GCP only) GKE cluster name. Leave blank to use the per-environment default.'
+        )
+        string(
+            name: 'GKE_CLUSTER_LOCATION',
+            defaultValue: 'us-central1',
+            description: '(GCP only) GKE cluster region/zone.'
+        )
+        string(
+            name: 'TEARDOWN_AFTER_MINUTES',
+            defaultValue: '5',
+            description: 'Minutes to wait before scaling dev/stage to zero. Use 0 to keep running.'
+        )
     }
 
     options {
         timestamps()
+        timeout(time: 90, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '20'))
     }
 
     environment {
-        DOCKER_IMAGE_PREFIX = "diegopolancolozano/circleguard"
-        DOCKER_CREDENTIALS_ID = "dockerhub-credentials"
-        KUBECONFIG_CREDENTIALS_ID = "kubeconfig-credentials"
-        QR_SECRET_CREDENTIALS_ID = "qr-secret-value"
-        DOCKERHUB_EMAIL = "devops@circleguard.local"
+        DOCKER_IMAGE_PREFIX    = "diegopolancolozano/circleguard"
+        DOCKER_CREDENTIALS_ID  = "dockerhub-credentials"
+        DOCKERHUB_EMAIL        = "devops@circleguard.local"
+        GCP_SA_CREDENTIALS_ID  = "gcp-sa-credentials"
     }
 
     stages {
+
+        // ------------------------------------------------------------------ //
         stage("Checkout") {
             steps {
                 checkout scm
             }
         }
 
+        // ------------------------------------------------------------------ //
         stage("Prepare") {
             steps {
                 sh "chmod +x scripts/ci/*.sh"
             }
         }
 
+        // ------------------------------------------------------------------ //
+        // Determine deploy environment and image tags based on branch name.
         stage("Resolve Environment") {
             steps {
                 script {
                     env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'reduced').trim()
-                    env.CLOUD_TARGET = (params.CLOUD_TARGET ?: 'local').trim()
-                    if (env.BRANCH_NAME == "dev") {
-                        env.DEPLOY_ENV = "dev"
-                        env.IMAGE_TAGS = "dev"
-                    } else if (env.BRANCH_NAME == "stage") {
-                        env.DEPLOY_ENV = "stage"
-                        env.IMAGE_TAGS = "stage"
-                    } else if (env.BRANCH_NAME == "main") {
-                        env.DEPLOY_ENV = "prod"
-                        env.IMAGE_TAGS = "stage,prod"
-                    } else {
-                        env.DEPLOY_ENV = ""
-                        env.IMAGE_TAGS = ""
+                    env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'gcp').trim()
+
+                    switch (env.BRANCH_NAME) {
+                        case "dev":
+                            env.DEPLOY_ENV  = "dev"
+                            env.IMAGE_TAGS  = "dev"
+                            break
+                        case "stage":
+                            env.DEPLOY_ENV  = "stage"
+                            env.IMAGE_TAGS  = "stage"
+                            break
+                        case "main":
+                            env.DEPLOY_ENV  = "prod"
+                            env.IMAGE_TAGS  = "stage,prod"
+                            break
+                        default:
+                            env.DEPLOY_ENV  = ""
+                            env.IMAGE_TAGS  = ""
                     }
+
+                    // A unique kubeconfig file written to the workspace so it
+                    // persists across stages and is accessible to background nohup.
+                    env.KUBECONFIG_PATH = "${env.WORKSPACE}/.kubeconfig-${env.BUILD_NUMBER}"
+
+                    echo "PIPELINE_MODE=${env.PIPELINE_MODE} | CLOUD_TARGET=${env.CLOUD_TARGET} | BRANCH=${env.BRANCH_NAME} | DEPLOY_ENV=${env.DEPLOY_ENV}"
                 }
             }
         }
 
+        // ------------------------------------------------------------------ //
+        // Validate cloud target and set cloud-specific configuration.
         stage("Resolve Cloud Target") {
             steps {
                 script {
-                    echo "PIPELINE_MODE=${env.PIPELINE_MODE}"
-                    echo "CLOUD_TARGET=${env.CLOUD_TARGET}"
-
                     if (!(env.CLOUD_TARGET in ['local', 'digitalocean', 'gcp', 'multi'])) {
                         error "Invalid CLOUD_TARGET='${env.CLOUD_TARGET}'. Allowed: local, digitalocean, gcp, multi"
                     }
 
-                    if (env.PIPELINE_MODE == 'reduced' && env.CLOUD_TARGET != 'local') {
-                        echo "Reduced mode selected: cloud target is informational only; no deploy stages will run."
+                    // Choose kubeconfig credential ID for non-GKE clouds.
+                    switch (env.CLOUD_TARGET) {
+                        case "digitalocean":
+                            env.KUBECONFIG_CREDENTIALS_ID = "kubeconfig-do-credentials"; break
+                        case "gcp":
+                        case "multi":
+                            env.KUBECONFIG_CREDENTIALS_ID = ""; break   // GKE uses SA JSON, not kubeconfig file
+                        default:
+                            env.KUBECONFIG_CREDENTIALS_ID = "kubeconfig-credentials"
                     }
 
-                    if (env.CLOUD_TARGET == 'digitalocean') {
-                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-do-credentials'
-                    } else if (env.CLOUD_TARGET == 'gcp') {
-                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-gcp-credentials'
-                    } else if (env.CLOUD_TARGET == 'local') {
-                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-credentials'
-                    } else if (env.CLOUD_TARGET == 'multi') {
-                        // Multi-cloud run: select one kubeconfig per execution. Use two runs (DO + GCP).
-                        env.KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-gcp-credentials'
+                    // Per-environment GCP defaults (can be overridden via params).
+                    if (env.CLOUD_TARGET in ['gcp', 'multi']) {
+                        env.RESOLVED_GCP_PROJECT      = (params.GCP_PROJECT?.trim())      ?: "YOUR_GCP_PROJECT"
+                        env.RESOLVED_GKE_CLUSTER_NAME = (params.GKE_CLUSTER_NAME?.trim()) ?: "circleguard-${env.DEPLOY_ENV ?: 'stage'}"
+                        env.RESOLVED_GKE_LOCATION     = (params.GKE_CLUSTER_LOCATION?.trim()) ?: "us-central1"
+                        echo "GCP target => project=${env.RESOLVED_GCP_PROJECT} cluster=${env.RESOLVED_GKE_CLUSTER_NAME} location=${env.RESOLVED_GKE_LOCATION}"
                     }
 
-                    echo "KUBECONFIG_CREDENTIALS_ID=${env.KUBECONFIG_CREDENTIALS_ID}"
-
-                    if (env.PIPELINE_MODE == 'full') {
-                        if (env.CLOUD_TARGET == 'digitalocean') {
-                            echo "Full mode on DigitalOcean: expecting DOKS kubeconfig in Jenkins credential '${env.KUBECONFIG_CREDENTIALS_ID}'."
-                        } else if (env.CLOUD_TARGET == 'gcp') {
-                            echo "Full mode on GCP: expecting GKE kubeconfig in Jenkins credential '${env.KUBECONFIG_CREDENTIALS_ID}'."
-                        } else if (env.CLOUD_TARGET == 'multi') {
-                            echo "Full mode multi-cloud (DO + GCP): run twice with CLOUD_TARGET=digitalocean and CLOUD_TARGET=gcp."
-                            echo "Use docs/MULTICLOUD_GCP_DO.md for rollout strategy and staged adoption."
-                        }
+                    if (env.CLOUD_TARGET == 'multi') {
+                        echo "MULTI-CLOUD mode: run this pipeline twice — once with CLOUD_TARGET=digitalocean and once with CLOUD_TARGET=gcp."
+                        echo "See docs/MULTICLOUD_GCP_DO.md for the staged rollout strategy."
                     }
                 }
             }
         }
 
+        // ------------------------------------------------------------------ //
         stage("Compute Version") {
             steps {
                 script {
-                    env.RELEASE_VERSION = sh(script: "scripts/ci/semver-from-git.sh", returnStdout: true).trim()
+                    env.RELEASE_VERSION = sh(
+                        script: "scripts/ci/semver-from-git.sh",
+                        returnStdout: true
+                    ).trim()
+                    def gitSha = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    env.GIT_SHA = gitSha
+
+                    // Append version + SHA to image tags so every push is traceable.
+                    if (env.IMAGE_TAGS) {
+                        env.IMAGE_TAGS = "${env.IMAGE_TAGS},${env.RELEASE_VERSION}"
+                    }
+
                     sh "mkdir -p build"
                     writeFile file: "build/semver.txt", text: "${env.RELEASE_VERSION}\n"
-                    echo "RELEASE_VERSION=${env.RELEASE_VERSION}"
+                    echo "RELEASE_VERSION=${env.RELEASE_VERSION}  GIT_SHA=${env.GIT_SHA}"
                 }
             }
             post {
@@ -111,6 +184,8 @@ pipeline {
             }
         }
 
+        // ------------------------------------------------------------------ //
+        // Prompt for teardown window (only for interactive/manual builds).
         stage("Ask Teardown Minutes") {
             when {
                 expression { return env.DEPLOY_ENV?.trim() && env.PIPELINE_MODE == 'full' }
@@ -119,19 +194,16 @@ pipeline {
                 script {
                     def raw = (params.TEARDOWN_AFTER_MINUTES ?: '0').trim()
                     if (raw == '0') {
-                        def manualCauses = []
-                        try {
-                            manualCauses = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
-                        } catch (ignored) {
-                            manualCauses = []
-                        }
-
-                        if (manualCauses) {
-                            def ans = input message: "¿Cuántos minutos antes de teardown para ${env.DEPLOY_ENV}?", parameters: [string(name: 'TEARDOWN_INPUT', defaultValue: '5', description: 'Minutos antes de teardown')]
+                        def isManual = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause') as boolean
+                        if (isManual) {
+                            def ans = input(
+                                message: "Minutes before teardown for '${env.DEPLOY_ENV}'?",
+                                parameters: [string(name: 'MINUTES', defaultValue: '5')]
+                            )
                             env.TEARDOWN_AFTER_MINUTES = (ans ?: '5').trim()
                         } else {
                             env.TEARDOWN_AFTER_MINUTES = '5'
-                            echo "Build triggered by push or non-manual cause; defaulting teardown to 5 minutes."
+                            echo "Non-interactive build: defaulting teardown to 5 minutes."
                         }
                     } else {
                         env.TEARDOWN_AFTER_MINUTES = raw
@@ -141,72 +213,111 @@ pipeline {
             }
         }
 
-        stage("Build & Integration Tests") {
+        // ------------------------------------------------------------------ //
+        // Compile, run all tests, generate coverage report.
+        // The compiled classes are reused by 'Build & Push Images' (no second clean).
+        stage("Build & Test") {
             steps {
-                sh "./gradlew clean test jacocoTestReport --info"
+                sh "./gradlew clean test jacocoTestReport --info --no-daemon"
             }
             post {
                 always {
+                    junit testResults: "**/build/test-results/test/*.xml", allowEmptyResults: true
                     archiveArtifacts artifacts: "**/build/reports/jacoco/test/**, **/build/reports/tests/test/**", allowEmptyArchive: true
                 }
             }
         }
 
+        // ------------------------------------------------------------------ //
         stage("Static Analysis (SonarQube)") {
             when {
-                expression { return env.PIPELINE_MODE in ['reduced', 'full'] }
+                expression {
+                    def sonarHost = (env.SONAR_HOST_URL ?: "").trim()
+                    def sonarToken = (env.SONAR_TOKEN ?: "").trim()
+                    return sonarHost && sonarToken
+                }
+            }
+            steps {
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    sh "./gradlew sonarqube -Dsonar.host.url=${env.SONAR_HOST_URL} -Dsonar.login=${env.SONAR_TOKEN} --no-daemon"
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        // Write a kubeconfig file to WORKSPACE that survives across stages.
+        //   GCP/GKE : activate SA + gcloud get-credentials → write to KUBECONFIG_PATH
+        //   DO/local: copy the pre-built kubeconfig credential → write to KUBECONFIG_PATH
+        stage("Configure K8s Access") {
+            when {
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
             }
             steps {
                 script {
-                    def sonarHost = (env.SONAR_HOST_URL ?: "").trim()
-                    def sonarToken = (env.SONAR_TOKEN ?: "").trim()
-                    if (sonarHost && sonarToken) {
-                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                            sh "./gradlew sonarqube -Dsonar.host.url=${sonarHost} -Dsonar.login=${sonarToken}"
+                    if (env.CLOUD_TARGET in ['gcp', 'multi']) {
+                        withCredentials([file(credentialsId: env.GCP_SA_CREDENTIALS_ID, variable: 'GCP_SA_FILE')]) {
+                            sh """
+                                KUBECONFIG="${env.KUBECONFIG_PATH}" \
+                                GCP_SA_FILE="${GCP_SA_FILE}" \
+                                GCP_PROJECT="${env.RESOLVED_GCP_PROJECT}" \
+                                GKE_CLUSTER_NAME="${env.RESOLVED_GKE_CLUSTER_NAME}" \
+                                GKE_CLUSTER_LOCATION="${env.RESOLVED_GKE_LOCATION}" \
+                                scripts/ci/ensure-gke-access.sh
+                            """
                         }
                     } else {
-                        echo "Skipping SonarQube: SONAR_HOST_URL or SONAR_TOKEN not set."
+                        withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBE_FILE')]) {
+                            sh """
+                                cp "\${KUBE_FILE}" "${env.KUBECONFIG_PATH}"
+                                chmod 600 "${env.KUBECONFIG_PATH}"
+                            """
+                        }
+                    }
+                    // Sanity check
+                    withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                        sh "kubectl version --client --short || kubectl version --client"
+                        sh "kubectl config current-context"
                     }
                 }
             }
         }
 
+        // ------------------------------------------------------------------ //
+        // Reuse jars from Build & Test stage (no --clean). Push all tags.
         stage("Build & Push Images") {
             when {
                 expression { return env.PIPELINE_MODE == 'full' && env.IMAGE_TAGS?.trim() }
             }
             steps {
                 script {
-                    // Detect whether relevant files changed (services, Dockerfile, build files)
-                    def changed = sh(script: "git diff --name-only HEAD~1..HEAD || true", returnStdout: true).trim()
-                    boolean needBuild = false
-                    if (!changed) {
-                        // No previous commit in shallow clones or first build: build to be safe
-                        needBuild = true
-                    } else {
-                        if (changed =~ /(services\/|Dockerfile|build.gradle|settings.gradle|gradlew|mobile\/|app\/|gradle\/)/) {
-                            needBuild = true
-                        }
-                    }
-
+                    def changed = sh(
+                        script: "git diff --name-only HEAD~1..HEAD 2>/dev/null || true",
+                        returnStdout: true
+                    ).trim()
+                    boolean needBuild = !changed || (changed =~ /(services\/|Dockerfile|build\.gradle|settings\.gradle|gradlew|mobile\/|gradle\/)/)
                     if (needBuild) {
-                        withCredentials([usernamePassword(credentialsId: env.DOCKER_CREDENTIALS_ID, usernameVariable: "DOCKERHUB_USERNAME", passwordVariable: "DOCKERHUB_PASSWORD")]) {
-                            sh "scripts/ci/build-and-push-images.sh '${IMAGE_TAGS}' '${DOCKER_IMAGE_PREFIX}' '${DOCKERHUB_USERNAME}' '${DOCKERHUB_PASSWORD}'"
+                        withCredentials([usernamePassword(
+                            credentialsId: env.DOCKER_CREDENTIALS_ID,
+                            usernameVariable: 'DOCKERHUB_USERNAME',
+                            passwordVariable: 'DOCKERHUB_PASSWORD'
+                        )]) {
+                            sh "scripts/ci/build-and-push-images.sh '${env.IMAGE_TAGS}' '${env.DOCKER_IMAGE_PREFIX}' '${DOCKERHUB_USERNAME}' '${DOCKERHUB_PASSWORD}'"
                         }
                     } else {
-                        echo "No relevant changes detected in code/images; skipping build & push. Changed files:\n${changed}"
+                        echo "No service/Dockerfile changes detected — skipping image build.\nChanged: ${changed}"
                     }
                 }
             }
         }
 
-        stage("Trivy Scan") {
+        // ------------------------------------------------------------------ //
+        stage("Trivy Image Scan") {
             when {
                 expression { return env.PIPELINE_MODE == 'full' && env.IMAGE_TAGS?.trim() }
             }
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    sh "scripts/ci/run-trivy.sh '${IMAGE_TAGS}' '${DOCKER_IMAGE_PREFIX}'"
+                    sh "scripts/ci/run-trivy.sh '${env.IMAGE_TAGS}' '${env.DOCKER_IMAGE_PREFIX}'"
                 }
             }
             post {
@@ -216,21 +327,29 @@ pipeline {
             }
         }
 
+        // ------------------------------------------------------------------ //
+        // Enable Flyway baseline migration only on specific app services.
         stage("Ensure Flyway Baseline") {
             when {
                 expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
                     script {
-                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                            if (env.BRANCH_NAME == 'main') {
-                                echo "Setting SPRING_FLYWAY_BASELINE_ON_MIGRATE=true on 'stage' and 'prod' namespaces"
-                                sh "kubectl -n stage set env deployment --all SPRING_FLYWAY_BASELINE_ON_MIGRATE=true || true"
-                                sh "kubectl -n prod set env deployment --all SPRING_FLYWAY_BASELINE_ON_MIGRATE=true || true"
-                            } else {
-                                echo "Setting SPRING_FLYWAY_BASELINE_ON_MIGRATE=true on namespace ${env.DEPLOY_ENV}"
-                                sh "kubectl -n ${env.DEPLOY_ENV} set env deployment --all SPRING_FLYWAY_BASELINE_ON_MIGRATE=true || true"
+                        // Only target services that actually run Flyway migrations.
+                        def flywayServices = [
+                            "circleguard-auth-service",
+                            "circleguard-identity-service",
+                            "circleguard-promotion-service",
+                            "circleguard-gateway-service",
+                            "circleguard-file-service"
+                        ]
+                        def namespaces = (env.BRANCH_NAME == 'main') ? ['stage', 'prod'] : [env.DEPLOY_ENV]
+                        for (ns in namespaces) {
+                            for (svc in flywayServices) {
+                                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                                    sh "kubectl -n ${ns} set env deployment/${svc} SPRING_FLYWAY_BASELINE_ON_MIGRATE=true 2>/dev/null || true"
+                                }
                             }
                         }
                     }
@@ -238,31 +357,29 @@ pipeline {
             }
         }
 
+        // ------------------------------------------------------------------ //
+        // Deploy to dev or stage (main branch deploys stage first; prod is gated).
         stage("Deploy") {
             when {
                 expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
                     script {
-                        if (env.BRANCH_NAME == "main") {
-                            // Main branch: deploy to stage first, then prod
-                            sh "scripts/ci/k8s-deploy.sh stage"
-                        } else {
-                            // Dev or stage branch: deploy to respective environment
-                            sh "scripts/ci/k8s-deploy.sh ${env.DEPLOY_ENV}"
-                        }
+                        def targetEnv = (env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV
+                        sh "scripts/ci/k8s-deploy.sh ${targetEnv}"
                     }
                 }
             }
         }
 
+        // ------------------------------------------------------------------ //
         stage("Deploy Monitoring") {
             when {
                 expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                         sh "scripts/ci/k8s-deploy-monitoring.sh"
                     }
@@ -270,55 +387,86 @@ pipeline {
             }
         }
 
-        stage("Testing & Performance") {
+        // ------------------------------------------------------------------ //
+        // Smoke tests: run inside the cluster (curl pod) — only on stage branch.
+        stage("Smoke Tests") {
             when {
-                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
+                allOf {
+                    branch "stage"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                    script {
-                        def perfEnv = (env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/k8s-smoke-tests.sh stage"
+                    }
+                }
+            }
+        }
 
-                        def tasks = [:]
-
-                        if (env.BRANCH_NAME == 'stage') {
-                            tasks['smoke-tests'] = {
-                                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                                    sh "scripts/ci/k8s-smoke-tests.sh stage"
-                                }
-                            }
-                        } else if (env.BRANCH_NAME == 'main') {
-                            tasks['e2e-tests'] = {
-                                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                                    sh "scripts/ci/run-e2e-tests.sh stage"
-                                }
-                            }
-                        }
-
-                        tasks['performance'] = {
-                            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                                sh "scripts/ci/run-locust.sh ${perfEnv}"
-                                sh "scripts/ci/performance-metrics.sh ${perfEnv}"
-                            }
-                        }
-
-                        parallel tasks
+        // ------------------------------------------------------------------ //
+        // E2E tests via port-forward — only on main branch (against stage deploy).
+        stage("E2E Tests") {
+            when {
+                allOf {
+                    branch "main"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
+            }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/run-e2e-tests.sh stage"
                     }
                 }
             }
             post {
                 always {
-                    archiveArtifacts artifacts: "tests/performance/results/locust-*.log, tests/performance/results/locust-*_stats.csv, tests/performance/results/locust-*_failures.csv, tests/performance/results/locust-*_exceptions.csv, tests/performance/results/metrics/*.md, tests/performance/results/metrics/*.json", allowEmptyArchive: true
+                    junit testResults: "**/build/test-results/test/*.xml", allowEmptyResults: true
                 }
             }
         }
 
+        // ------------------------------------------------------------------ //
+        // Locust performance tests + metrics summary report.
+        stage("Performance Tests") {
+            when {
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
+            }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                    script {
+                        def perfEnv = (env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV
+                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                            sh "scripts/ci/run-locust.sh ${perfEnv}"
+                        }
+                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                            sh "scripts/ci/performance-metrics.sh ${perfEnv}"
+                        }
+                    }
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: [
+                        "tests/performance/results/locust-*.log",
+                        "tests/performance/results/locust-*_stats.csv",
+                        "tests/performance/results/locust-*_failures.csv",
+                        "tests/performance/results/metrics/*.md",
+                        "tests/performance/results/metrics/*.json"
+                    ].join(", "), allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
         stage("Security Scan (OWASP ZAP)") {
             when {
                 expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
                     script {
                         def scanEnv = (env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV
                         catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
@@ -334,6 +482,8 @@ pipeline {
             }
         }
 
+        // ------------------------------------------------------------------ //
+        // Chaos experiments (pod-kill, scale-zero, cpu-stress) — main only.
         stage("Chaos Experiments") {
             when {
                 allOf {
@@ -342,7 +492,7 @@ pipeline {
                 }
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                         sh "scripts/ci/chaos-experiments.sh stage all"
                     }
@@ -355,6 +505,8 @@ pipeline {
             }
         }
 
+        // ------------------------------------------------------------------ //
+        // Capture cluster + pod state as evidence artifact — stage branch only.
         stage("Stage Evidence") {
             when {
                 allOf {
@@ -363,15 +515,20 @@ pipeline {
                 }
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                         sh "scripts/ci/k8s-stage-evidence.sh stage stage-evidence.txt"
-                        archiveArtifacts artifacts: "stage-evidence.txt", onlyIfSuccessful: true
                     }
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: "stage-evidence.txt", allowEmptyArchive: true
                 }
             }
         }
 
+        // ------------------------------------------------------------------ //
         stage("Approve Prod Deploy") {
             when {
                 allOf {
@@ -380,10 +537,11 @@ pipeline {
                 }
             }
             steps {
-                input message: "Approve production deploy ${env.RELEASE_VERSION ?: 'unknown'}?"
+                input message: "Deploy version ${env.RELEASE_VERSION ?: 'unknown'} to PRODUCTION?"
             }
         }
 
+        // ------------------------------------------------------------------ //
         stage("Deploy Prod") {
             when {
                 allOf {
@@ -392,12 +550,13 @@ pipeline {
                 }
             }
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
                     sh "scripts/ci/k8s-deploy.sh prod"
                 }
             }
         }
 
+        // ------------------------------------------------------------------ //
         stage("Generate Release Notes") {
             when {
                 allOf {
@@ -407,42 +566,58 @@ pipeline {
             }
             steps {
                 sh "scripts/ci/generate-release-notes.sh"
-                archiveArtifacts artifacts: "release-notes.md", onlyIfSuccessful: true
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: "release-notes.md", allowEmptyArchive: true
+                }
             }
         }
 
+        // ------------------------------------------------------------------ //
+        // Scale dev/stage to zero after TEARDOWN_AFTER_MINUTES.
+        // Uses KUBECONFIG_PATH (a workspace file) so the nohup background process
+        // can access it after this stage — unlike withCredentials temp files.
         stage("Scheduled Teardown") {
             when {
-                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV in ["dev", "stage"] }
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV in ['dev', 'stage'] }
             }
             steps {
                 script {
-                    def teardownRaw = (env.TEARDOWN_AFTER_MINUTES ?: "0").trim()
-                    if (!(teardownRaw ==~ /^\d+$/)) {
-                        error "TEARDOWN_AFTER_MINUTES must be a non-negative integer. Received: '${teardownRaw}'"
+                    def raw = (env.TEARDOWN_AFTER_MINUTES ?: '0').trim()
+                    if (!(raw ==~ /^\d+$/)) {
+                        error "TEARDOWN_AFTER_MINUTES must be a non-negative integer. Got: '${raw}'"
                     }
-
-                    int teardownMinutes = teardownRaw as Integer
-                    if (teardownMinutes > 0) {
-                        echo "Scheduling background teardown in ${teardownMinutes} minute(s) for env '${env.DEPLOY_ENV}'"
-                        // Run teardown in background so the pipeline can finish and be re-run later.
-                        withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
-                            sh "nohup sh -c 'sleep ${teardownMinutes}m && scripts/ci/k8s-teardown.sh ${env.DEPLOY_ENV}' >/dev/null 2>&1 &"
-                        }
+                    int minutes = raw as Integer
+                    if (minutes > 0) {
+                        echo "Scheduling teardown of '${env.DEPLOY_ENV}' in ${minutes} minute(s)."
+                        sh """
+                            nohup sh -c \
+                              'sleep ${minutes}m && KUBECONFIG=${env.KUBECONFIG_PATH} scripts/ci/k8s-teardown.sh ${env.DEPLOY_ENV}' \
+                              > /tmp/teardown-${env.DEPLOY_ENV}-${env.BUILD_NUMBER}.log 2>&1 &
+                        """
                     } else {
-                        echo "TEARDOWN_AFTER_MINUTES=0, environment '${env.DEPLOY_ENV}' will remain up."
+                        echo "TEARDOWN_AFTER_MINUTES=0 — environment '${env.DEPLOY_ENV}' will remain running."
                     }
                 }
             }
         }
-    }
+
+    } // end stages
 
     post {
+        always {
+            // Clean up the workspace kubeconfig so tokens don't linger on disk.
+            sh "rm -f '${env.KUBECONFIG_PATH ?: '/dev/null'}' 2>/dev/null || true"
+        }
         failure {
-            sh "scripts/ci/notify-webhook.sh failure"
+            sh "scripts/ci/notify-webhook.sh failure || true"
         }
         unstable {
-            sh "scripts/ci/notify-webhook.sh unstable"
+            sh "scripts/ci/notify-webhook.sh unstable || true"
+        }
+        success {
+            sh "scripts/ci/notify-webhook.sh success || true"
         }
     }
 }
