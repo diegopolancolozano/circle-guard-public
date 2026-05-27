@@ -122,13 +122,15 @@ EOF
 
 # === Main execution ===
 
+export AUTH_BASE_URL="$(svc_url circleguard-auth-service 18186)"
 export IDENTITY_BASE_URL="$(svc_url circleguard-identity-service 18180)"
 export GATEWAY_BASE_URL="$(svc_url circleguard-gateway-service 18181)"
+export PROMOTION_BASE_URL="$(svc_url circleguard-promotion-service 18182 8081)"
 export QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.qr_secret}' | base64 --decode)"
 
-USERS="${USERS:-15}"
-SPAWN_RATE="${SPAWN_RATE:-2}"
-RUN_TIME="${RUN_TIME:-30s}"
+USERS="${USERS:-20}"
+SPAWN_RATE="${SPAWN_RATE:-4}"
+RUN_TIME="${RUN_TIME:-60s}"
 
 RESULTS_DIR="${LOCUST_DIR}/results"
 mkdir -p "$RESULTS_DIR"
@@ -137,16 +139,15 @@ RESULT_LOG="${RESULTS_DIR}/locust-${ENVIRONMENT}-${TIMESTAMP}.log"
 echo "[Locust] LOCUST_DIR=${LOCUST_DIR}"
 echo "[Locust] RESULTS_DIR=${RESULTS_DIR}"
 echo "[Locust] USERS=${USERS} SPAWN_RATE=${SPAWN_RATE} RUN_TIME=${RUN_TIME}"
-echo "[Locust] Listing LOCUST_DIR:"
-ls -la "${LOCUST_DIR}" || true
 
 echo "[Locust] Testing docker mount for ${LOCUST_DIR}"
 if docker run --rm -v "${LOCUST_DIR}:/mnt/performance" busybox ls /mnt/performance/locustfile.py >/dev/null 2>&1; then
   echo "[Locust] Docker mount succeeded - running via docker run"
-  CSV_BASENAME="${RESULTS_DIR}/locust-${ENVIRONMENT}-${TIMESTAMP}"
   docker run --rm \
+    -e AUTH_BASE_URL="$AUTH_BASE_URL" \
     -e IDENTITY_BASE_URL="$IDENTITY_BASE_URL" \
     -e GATEWAY_BASE_URL="$GATEWAY_BASE_URL" \
+    -e PROMOTION_BASE_URL="$PROMOTION_BASE_URL" \
     -e QR_SECRET="$QR_SECRET" \
     -v "${LOCUST_DIR}:/mnt/performance" \
     -v "${RESULTS_DIR}:/tmp/results" \
@@ -156,13 +157,14 @@ if docker run --rm -v "${LOCUST_DIR}:/mnt/performance" busybox ls /mnt/performan
     --users "$USERS" \
     --spawn-rate "$SPAWN_RATE" \
     --run-time "$RUN_TIME" \
-    --host "$GATEWAY_BASE_URL" \
     --csv="/tmp/results/locust-${TIMESTAMP}" | tee "$RESULT_LOG"
   echo "[Locust] CSV reports saved to ${RESULTS_DIR}/locust-${TIMESTAMP}*"
 else
   echo "[Locust] Docker mount test failed - using K8s fallback"
+  AUTH_BASE_URL="http://circleguard-auth-service:8080"
   IDENTITY_BASE_URL="http://circleguard-identity-service:8080"
   GATEWAY_BASE_URL="http://circleguard-gateway-service:8080"
+  PROMOTION_BASE_URL="http://circleguard-promotion-service:8081"
   run_locust_in_k8s
 fi
 
