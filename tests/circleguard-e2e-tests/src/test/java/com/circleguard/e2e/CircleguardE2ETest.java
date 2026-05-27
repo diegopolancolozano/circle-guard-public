@@ -14,13 +14,15 @@ import static org.hamcrest.Matchers.*;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CircleguardE2ETest {
 
+    private String authBaseUrl;
     private String identityBaseUrl;
     private String promotionBaseUrl;
     private String gatewayBaseUrl;
-        private String fileBaseUrl;
+    private String fileBaseUrl;
 
     @BeforeAll
     void setUp() {
+        authBaseUrl = requiredEnv("AUTH_BASE_URL");
         identityBaseUrl = requiredEnv("IDENTITY_BASE_URL");
         promotionBaseUrl = requiredEnv("PROMOTION_BASE_URL");
         gatewayBaseUrl = requiredEnv("GATEWAY_BASE_URL");
@@ -28,6 +30,53 @@ class CircleguardE2ETest {
 
         RestAssured.enableLoggingOfRequestAndResponseIfValidationFails();
     }
+
+    // ── Auth service ──────────────────────────────────────────────────────────
+
+    @Test
+    void authServiceHealthShouldBeUp() {
+        given()
+                .baseUri(authBaseUrl)
+        .when()
+                .get("/actuator/health")
+        .then()
+                .statusCode(200)
+                .body("status", equalTo("UP"));
+    }
+
+    @Test
+    void shouldRejectLoginWithInvalidCredentials() {
+        given()
+                .baseUri(authBaseUrl)
+                .contentType(ContentType.JSON)
+                .body(Map.of("username", "no-such-user-e2e", "password", "wrong"))
+        .when()
+                .post("/api/v1/auth/login")
+        .then()
+                .statusCode(anyOf(equalTo(401), equalTo(403), equalTo(400)));
+    }
+
+    @Test
+    void shouldLoginAndReceiveJwtToken() {
+        String user = System.getenv("LOAD_TEST_USER");
+        String pass = System.getenv("LOAD_TEST_PASS");
+        Assumptions.assumeTrue(user != null && !user.isBlank() && pass != null && !pass.isBlank(),
+                "LOAD_TEST_USER / LOAD_TEST_PASS not set — skipping login happy-path test");
+
+        given()
+                .baseUri(authBaseUrl)
+                .contentType(ContentType.JSON)
+                .body(Map.of("username", user, "password", pass))
+        .when()
+                .post("/api/v1/auth/login")
+        .then()
+                .statusCode(200)
+                .body("token", notNullValue())
+                .body("type", equalTo("Bearer"))
+                .body("anonymousId", matchesPattern("^[0-9a-fA-F-]{36}$"));
+    }
+
+    // ── Identity service ──────────────────────────────────────────────────────
 
     @Test
     void shouldMapIdentityToAnonymousId() {
