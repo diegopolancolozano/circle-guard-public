@@ -257,6 +257,19 @@ pipeline {
             }
         }
 
+        stage("Deploy Monitoring") {
+            when {
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
+            }
+            steps {
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/k8s-deploy-monitoring.sh"
+                    }
+                }
+            }
+        }
+
         stage("Testing & Performance") {
             when {
                 expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
