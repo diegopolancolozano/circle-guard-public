@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-finops
+  namespace: monitoring
+data:
+  finops.json: |
+    {
+      "title": "CircleGuard FinOps",
+      "uid": "circleguard-finops",
+      "schemaVersion": 38,
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Pods Running (billable)",
+          "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+          "targets": [{
+            "expr": "count(kube_pod_status_phase{phase=\"Running\", namespace=~\"dev|stage|prod\"})",
+            "legendFormat": "Pods"
+          }],
+          "options": {"colorMode": "background", "graphMode": "none"}
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Total CPU Requested (cores)",
+          "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+          "targets": [{
+            "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\", namespace=~\"dev|stage|prod\"}) / 1000",
+            "legendFormat": "CPU cores"
+          }],
+          "options": {"colorMode": "background", "graphMode": "none"}
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Total Memory Requested (GiB)",
+          "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+          "targets": [{
+            "expr": "sum(kube_pod_container_resource_requests{resource=\"memory\", namespace=~\"dev|stage|prod\"}) / 1024 / 1024 / 1024",
+            "legendFormat": "GiB"
+          }],
+          "options": {"colorMode": "background", "graphMode": "none"}
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Est. Monthly Cost (USD) — DO s-2vcpu-4gb @ $24/node",
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+          "targets": [{
+            "expr": "3 * 24",
+            "legendFormat": "$/month"
+          }],
+          "options": {"colorMode": "background", "graphMode": "none",
+            "reduceOptions": {"calcs": ["lastNotNull"]}}
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "CPU Utilization vs Request per Service",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"dev|stage|prod\", container!=\"\"}[5m])) by (container)",
+              "legendFormat": "used: {{container}}"
+            },
+            {
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\", namespace=~\"dev|stage|prod\"}) by (container) / 1000",
+              "legendFormat": "requested: {{container}}"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Memory Utilization vs Request per Service (MiB)",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=~\"dev|stage|prod\", container!=\"\"}) by (container) / 1024 / 1024",
+              "legendFormat": "used: {{container}}"
+            },
+            {
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"memory\", namespace=~\"dev|stage|prod\"}) by (container) / 1024 / 1024",
+              "legendFormat": "requested: {{container}}"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "type": "bargauge",
+          "title": "CPU Efficiency (used/requested) — lower waste = greener",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+          "targets": [{
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"dev|stage|prod\",container!=\"\"}[5m])) by (container) / sum(kube_pod_container_resource_requests{resource=\"cpu\",namespace=~\"dev|stage|prod\"}) by (container) * 1000",
+            "legendFormat": "{{container}}"
+          }],
+          "options": {"orientation": "horizontal", "displayMode": "gradient"}
+        },
+        {
+          "id": 8,
+          "type": "table",
+          "title": "Idle/Oversized Pods (CPU request > 2× actual use)",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+          "targets": [{
+            "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\",namespace=~\"dev|stage|prod\"}) by (container) / 1000 - sum(rate(container_cpu_usage_seconds_total{namespace=~\"dev|stage|prod\",container!=\"\"}[5m])) by (container) > 0.05",
+            "legendFormat": "{{container}}"
+          }],
+          "transformations": [{"id": "sortBy", "options": {"fields": [{"displayName": "Value", "desc": true}]}}]
+        }
+      ],
+      "time": {"from": "now-6h", "to": "now"},
+      "refresh": "5m"
+    }
