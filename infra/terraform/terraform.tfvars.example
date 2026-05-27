@@ -1,14 +1,22 @@
-kubeconfig_path    = "./kubeconfig-credentials.yaml"
+# ---------------------------------------------------------------------------
+# infra/terraform root workspace (all environments)
+# Copy to terraform.tfvars and fill in real values.
+# ---------------------------------------------------------------------------
+
+# GKE mode (recommended for GCP)
+use_gke              = true
+gcp_project          = "TU_PROJECT_ID"
+gke_cluster_name     = "circleguard-stage"
+gke_cluster_location = "us-central1"
+
+# Local kubeconfig fallback (set use_gke=false and fill this in for DO/local)
+# kubeconfig_path = "./kubeconfig-credentials.yaml"
+
 dockerhub_username = "TU_USUARIO_DOCKERHUB"
 dockerhub_password = "TU_TOKEN_DOCKERHUB"
 dockerhub_email    = "tu-correo@ejemplo.com"
-qr_secret          = "CAMBIA_ESTE_SECRET"
-# environments      = ["dev", "stage", "prod"]
-# If you prefer Terraform to configure Kubernetes provider using GKE, enable use_gke
-# and set the GCP project/cluster information. Ensure GOOGLE_APPLICATION_CREDENTIALS
-# points to a service account JSON with permissions to get cluster info and manage
-# resources as needed.
-# use_gke = true
-# gcp_project = "mi-proyecto-gcp"
-# gke_cluster_name = "circle-guard-cluster"
-# gke_cluster_location = "us-central1"
+
+# Generate with: openssl rand -hex 32
+qr_secret = "CAMBIA_ESTE_SECRET_32_CHARS_MIN"
+
+# environments = ["dev", "stage", "prod"]
