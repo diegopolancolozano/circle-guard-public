@@ -1,6 +1,6 @@
 package com.circleguard.auth.integration;
 
-import com.circleguard.auth.client.IdentityClient;
+import com.circleguard.auth.service.IdentityMappingService;
 import com.circleguard.auth.service.CustomUserDetailsService;
 import com.circleguard.auth.service.JwtTokenService;
 import org.junit.jupiter.api.Test;
@@ -37,9 +37,6 @@ public class AuthIntegrationTest {
 
     @MockBean
     private IdentityMappingService identityMappingService;
-
-    @MockBean
-    private CustomUserDetailsService userDetailsService;
 
     @MockBean
     private CustomUserDetailsService userDetailsService;

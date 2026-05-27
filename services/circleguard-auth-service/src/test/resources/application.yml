@@ -6,11 +6,6 @@ features:
   identity:
     use-remote: false
 
-management:
-  tracing:
-    sampling:
-      probability: 0.0
-
 resilience4j:
   circuitbreaker:
     instances:

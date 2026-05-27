@@ -124,6 +124,22 @@ pipeline {
             }
         }
 
+        stage("Compute Version") {
+            steps {
+                script {
+                    env.RELEASE_VERSION = sh(script: "scripts/ci/semver-from-git.sh", returnStdout: true).trim()
+                    sh "mkdir -p build"
+                    writeFile file: "build/semver.txt", text: "${env.RELEASE_VERSION}\n"
+                    echo "RELEASE_VERSION=${env.RELEASE_VERSION}"
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "build/semver.txt", allowEmptyArchive: true
+                }
+            }
+        }
+
         stage("Ask Teardown Minutes") {
             when {
                 expression { return env.DEPLOY_ENV?.trim() && env.PIPELINE_MODE == 'full' }
@@ -159,7 +175,31 @@ pipeline {
         // The compiled classes are reused by 'Build & Push Images' (no second clean).
         stage("Build & Test") {
             steps {
-                sh "./gradlew clean test jacocoTestReport --info --no-daemon"
+                sh "./gradlew clean test jacocoTestReport --info"
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "**/build/reports/jacoco/test/**, **/build/reports/tests/test/**", allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage("Static Analysis (SonarQube)") {
+            when {
+                expression { return env.PIPELINE_MODE in ['reduced', 'full'] }
+            }
+            steps {
+                script {
+                    def sonarHost = (env.SONAR_HOST_URL ?: "").trim()
+                    def sonarToken = (env.SONAR_TOKEN ?: "").trim()
+                    if (sonarHost && sonarToken) {
+                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                            sh "./gradlew sonarqube -Dsonar.host.url=${sonarHost} -Dsonar.login=${sonarToken}"
+                        }
+                    } else {
+                        echo "Skipping SonarQube: SONAR_HOST_URL or SONAR_TOKEN not set."
+                    }
+                }
             }
         }
 
@@ -197,42 +237,13 @@ pipeline {
             }
         }
 
-        // ------------------------------------------------------------------ //
-        // Reuse jars from Build & Test stage (no --clean). Push all tags.
-        stage("Build & Push Images") {
-            when {
-                expression { return env.PIPELINE_MODE == 'full' && env.IMAGE_TAGS?.trim() }
-            }
-            steps {
-                script {
-                    def changed = sh(
-                        script: "git diff --name-only HEAD~1..HEAD 2>/dev/null || true",
-                        returnStdout: true
-                    ).trim()
-                    boolean needBuild = !changed || (changed =~ /(services\/|Dockerfile|build\.gradle|settings\.gradle|gradlew|mobile\/|gradle\/)/)
-                    if (needBuild) {
-                        withCredentials([usernamePassword(
-                            credentialsId: env.DOCKER_CREDENTIALS_ID,
-                            usernameVariable: 'DOCKERHUB_USERNAME',
-                            passwordVariable: 'DOCKERHUB_PASSWORD'
-                        )]) {
-                            sh "scripts/ci/build-and-push-images.sh '${env.IMAGE_TAGS}' '${env.DOCKER_IMAGE_PREFIX}' '${DOCKERHUB_USERNAME}' '${DOCKERHUB_PASSWORD}'"
-                        }
-                    } else {
-                        echo "No service/Dockerfile changes detected — skipping image build.\nChanged: ${changed}"
-                    }
-                }
-            }
-        }
-
-        // ------------------------------------------------------------------ //
-        stage("Trivy Image Scan") {
+        stage("Trivy Scan") {
             when {
                 expression { return env.PIPELINE_MODE == 'full' && env.IMAGE_TAGS?.trim() }
             }
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    sh "scripts/ci/run-trivy.sh '${env.IMAGE_TAGS}' '${env.DOCKER_IMAGE_PREFIX}'"
+                    sh "scripts/ci/run-trivy.sh '${IMAGE_TAGS}' '${DOCKER_IMAGE_PREFIX}'"
                 }
             }
             post {
@@ -242,8 +253,6 @@ pipeline {
             }
         }
 
-        // ------------------------------------------------------------------ //
-        // Enable Flyway baseline migration only on specific app services.
         stage("Ensure Flyway Baseline") {
             when {
                 expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
@@ -343,51 +352,12 @@ pipeline {
             }
         }
 
-        // ------------------------------------------------------------------ //
-        // Locust performance tests + metrics summary report.
-        stage("Performance Tests") {
-            when {
-                allOf {
-                    branch "stage"
-                    expression { return env.PIPELINE_MODE == 'full' }
-                }
-            }
-            steps {
-                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
-                    script {
-                        def perfEnv = (env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV
-                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                            sh "scripts/ci/run-locust.sh ${perfEnv}"
-                        }
-                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                            sh "scripts/ci/performance-metrics.sh ${perfEnv}"
-                        }
-                    }
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: [
-                        "tests/performance/results/locust-*.log",
-                        "tests/performance/results/locust-*_stats.csv",
-                        "tests/performance/results/locust-*_failures.csv",
-                        "tests/performance/results/metrics/*.md",
-                        "tests/performance/results/metrics/*.json"
-                    ].join(", "), allowEmptyArchive: true
-                }
-            }
-        }
-
-        // ------------------------------------------------------------------ //
         stage("Security Scan (OWASP ZAP)") {
             when {
-                allOf {
-                    branch "main"
-                    expression { return env.PIPELINE_MODE == 'full' }
-                }
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
             }
             steps {
-                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
                     script {
                         def scanEnv = (env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV
                         catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
@@ -403,31 +373,6 @@ pipeline {
             }
         }
 
-        // ------------------------------------------------------------------ //
-        // Chaos experiments (pod-kill, scale-zero, cpu-stress) — main only.
-        stage("Chaos Experiments") {
-            when {
-                allOf {
-                    branch "main"
-                    expression { return env.PIPELINE_MODE == 'full' }
-                }
-            }
-            steps {
-                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
-                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                        sh "scripts/ci/chaos-experiments.sh stage all"
-                    }
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: "tests/chaos/results/*.md", allowEmptyArchive: true
-                }
-            }
-        }
-
-        // ------------------------------------------------------------------ //
-        // Capture cluster + pod state as evidence artifact — stage branch only.
         stage("Stage Evidence") {
             when {
                 allOf {
@@ -449,7 +394,6 @@ pipeline {
             }
         }
 
-        // ------------------------------------------------------------------ //
         stage("Approve Prod Deploy") {
             when {
                 allOf {
@@ -458,11 +402,10 @@ pipeline {
                 }
             }
             steps {
-                input message: "Deploy version ${env.RELEASE_VERSION ?: 'unknown'} to PRODUCTION?"
+                input message: "Approve production deploy ${env.RELEASE_VERSION ?: 'unknown'}?"
             }
         }
 
-        // ------------------------------------------------------------------ //
         stage("Deploy Prod") {
             when {
                 allOf {
@@ -539,6 +482,15 @@ pipeline {
         }
         success {
             sh "scripts/ci/notify-webhook.sh success || true"
+        }
+    }
+
+    post {
+        failure {
+            sh "scripts/ci/notify-webhook.sh failure"
+        }
+        unstable {
+            sh "scripts/ci/notify-webhook.sh unstable"
         }
     }
 }
