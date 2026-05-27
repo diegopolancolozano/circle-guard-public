@@ -29,3 +29,15 @@ variable "enable_jenkins_firewall" {
   type        = bool
   default     = true
 }
+
+variable "pods_cidr" {
+  description = "CIDR secundario para Pods de GKE"
+  type        = string
+  default     = "10.100.0.0/16"
+}
+
+variable "services_cidr" {
+  description = "CIDR secundario para Services de GKE"
+  type        = string
+  default     = "10.101.0.0/20"
+}
