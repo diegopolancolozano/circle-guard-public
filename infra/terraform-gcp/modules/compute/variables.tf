@@ -44,3 +44,9 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+variable "jenkins_service_account_email" {
+  description = "Email de la service account para el Jenkins VM (necesario para kubectl / gcloud)"
+  type        = string
+  default     = ""
+}
