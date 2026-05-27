@@ -1,6 +1,6 @@
 package com.circleguard.auth.integration;
 
-import com.circleguard.auth.client.IdentityClient;
+import com.circleguard.auth.service.IdentityMappingService;
 import com.circleguard.auth.service.CustomUserDetailsService;
 import com.circleguard.auth.service.JwtTokenService;
 import org.junit.jupiter.api.Test;
@@ -36,7 +36,7 @@ public class AuthIntegrationTest {
     private JwtTokenService jwtService;
 
     @MockBean
-    private IdentityClient identityClient;
+    private IdentityMappingService identityMappingService;
 
     @MockBean
     private CustomUserDetailsService userDetailsService;
@@ -47,7 +47,7 @@ public class AuthIntegrationTest {
         Authentication auth = Mockito.mock(Authentication.class);
 
         Mockito.when(authManager.authenticate(any())).thenReturn(auth);
-        Mockito.when(identityClient.getAnonymousId(eq("testuser"))).thenReturn(anon);
+        Mockito.when(identityMappingService.resolveAnonymousId(eq("testuser"))).thenReturn(anon);
         Mockito.when(jwtService.generateToken(eq(anon), any(Authentication.class))).thenReturn("mock-token");
 
         mockMvc.perform(post("/api/v1/auth/login")

@@ -4,6 +4,7 @@ plugins {
     kotlin("jvm") version "1.9.24" apply false
     kotlin("plugin.spring") version "1.9.24" apply false
     kotlin("plugin.jpa") version "1.9.24" apply false
+    id("org.sonarqube") version "5.0.0.4638"
 }
 
 allprojects {
@@ -15,9 +16,17 @@ allprojects {
     }
 }
 
+sonarqube {
+    properties {
+        property("sonar.projectKey", System.getenv("SONAR_PROJECT_KEY") ?: "circleguard")
+        property("sonar.projectName", System.getenv("SONAR_PROJECT_NAME") ?: "CircleGuard")
+    }
+}
+
 subprojects {
     apply(plugin = "java")
     apply(plugin = "org.jetbrains.kotlin.jvm")
+    apply(plugin = "jacoco")
     extensions.configure<JavaPluginExtension> {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(21))
@@ -45,5 +54,18 @@ subprojects {
 
     tasks.withType<Test> {
         useJUnitPlatform()
+        finalizedBy("jacocoTestReport")
+    }
+
+    extensions.configure<org.gradle.testing.jacoco.plugins.JacocoPluginExtension> {
+        toolVersion = "0.8.11"
+    }
+
+    tasks.withType<org.gradle.testing.jacoco.tasks.JacocoReport> {
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+            csv.required.set(false)
+        }
     }
 }
