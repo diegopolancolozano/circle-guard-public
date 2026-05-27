@@ -385,6 +385,27 @@ pipeline {
             }
         }
 
+        stage("Chaos Experiments") {
+            when {
+                allOf {
+                    branch "main"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
+            }
+            steps {
+                withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIALS_ID, variable: "KUBECONFIG")]) {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/chaos-experiments.sh stage all"
+                    }
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "tests/chaos/results/*.md", allowEmptyArchive: true
+                }
+            }
+        }
+
         stage("Stage Evidence") {
             when {
                 allOf {
