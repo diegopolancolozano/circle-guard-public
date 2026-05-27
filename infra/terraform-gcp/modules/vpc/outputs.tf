@@ -17,3 +17,13 @@ output "subnet_name" {
   description = "Nombre de la subred"
   value       = google_compute_subnetwork.subnet.name
 }
+
+output "pods_range_name" {
+  description = "Nombre del rango secundario para Pods de GKE"
+  value       = "${var.subnet_name}-pods"
+}
+
+output "services_range_name" {
+  description = "Nombre del rango secundario para Services de GKE"
+  value       = "${var.subnet_name}-services"
+}
