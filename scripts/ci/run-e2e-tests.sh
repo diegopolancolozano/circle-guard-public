@@ -117,8 +117,7 @@ for var in IDENTITY_BASE_URL PROMOTION_BASE_URL GATEWAY_BASE_URL FILE_BASE_URL; 
 done
 
 export QR_SECRET
-# Note: the key in the Kubernetes Secret is 'QR_SECRET' (uppercase)
-QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.QR_SECRET}' | base64 --decode)"
+QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.qr_secret}' | base64 --decode)"
 
 echo "=== All port-forwards active — running E2E tests ==="
 
