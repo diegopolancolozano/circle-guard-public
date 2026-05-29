@@ -3,6 +3,10 @@ resources:
   - infra-deployments.yaml
   - app-config-secret.yaml
   - qr-secret.yaml
+  - rbac.yaml
+  - network-policies.yaml
+  - hpa.yaml
+  - pdb.yaml
 
 configMapGenerator:
   - name: circleguard-config
