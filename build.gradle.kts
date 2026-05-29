@@ -24,15 +24,13 @@ sonarqube {
 }
 
 subprojects {
-    // Forzar Testcontainers 1.20.x — Spring Boot 3.2.4 trae 1.19.7 que tiene un bug
-    // con Docker 23+ (API mínima 1.40). La 1.20.0 lo corrige.
+    // Spring Boot 3.2.4 arrastra Testcontainers 1.19.7 que usa docker-java con API 1.32.
+    // Docker 29.x exige API mínima 1.40 → forzar 1.20.4 que soporta Docker 29.x.
+    // NO forzamos docker-java por separado: dejar que TC 1.20.4 gestione su propia versión.
     configurations.all {
         resolutionStrategy.eachDependency {
             if (requested.group == "org.testcontainers") {
                 useVersion("1.20.4")
-            }
-            if (requested.group == "com.github.docker-java") {
-                useVersion("3.4.0")
             }
         }
     }
@@ -69,10 +67,11 @@ subprojects {
     }
 
     tasks.withType<Test> {
-        // docker-java 3.x defaults to API 1.32; Docker 29.x requires min 1.40.
-        // Hardcode aquí para que el JVM forkeado por Gradle reciba el env var
-        // independiente del daemon o del entorno Jenkins.
+        // Docker 29.x exige API >= 1.40; docker-java defaultea a 1.32.
+        // Setear como env var Y system property para que el JVM forkeado
+        // lo reciba sin importar el Gradle daemon ni el entorno Jenkins.
         environment("DOCKER_API_VERSION", "1.41")
+        systemProperty("DOCKER_API_VERSION", "1.41")
         useJUnitPlatform()
         finalizedBy("jacocoTestReport")
     }
