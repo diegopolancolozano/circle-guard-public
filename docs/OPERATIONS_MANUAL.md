@@ -171,7 +171,7 @@ scripts/ci/run-locust.sh stage
 ### Escaneo de seguridad
 ```bash
 # Imágenes con Trivy
-scripts/ci/run-trivy.sh stage diegopolancolozano/circleguard
+scripts/ci/run-trivy.sh stage diegoapolancol/circleguard
 
 # OWASP ZAP baseline sobre gateway
 scripts/ci/run-owasp-zap.sh stage
