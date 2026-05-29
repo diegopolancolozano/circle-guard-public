@@ -63,7 +63,7 @@ pipeline {
     }
 
     environment {
-        DOCKER_IMAGE_PREFIX    = "diegopolancolozano/circleguard"
+        DOCKER_IMAGE_PREFIX    = "diegoapolancol/circleguard"
         DOCKER_CREDENTIALS_ID  = "dockerhub-credentials"
         DOCKERHUB_EMAIL        = "devops@circleguard.local"
         GCP_SA_CREDENTIALS_ID  = "gcp-sa-credentials"
