@@ -24,16 +24,10 @@ sonarqube {
 }
 
 subprojects {
-    // Spring Boot 3.2.4 arrastra Testcontainers 1.19.7 que usa docker-java con API 1.32.
-    // Docker 29.x exige API mínima 1.40 → forzar 1.20.4 que soporta Docker 29.x.
-    // NO forzamos docker-java por separado: dejar que TC 1.20.4 gestione su propia versión.
-    configurations.all {
-        resolutionStrategy.eachDependency {
-            if (requested.group == "org.testcontainers") {
-                useVersion("1.20.4")
-            }
-        }
-    }
+    // Nota: la versión de Testcontainers se fija directamente en cada servicio
+    // (services/*/build.gradle.kts) porque io.spring.dependency-management
+    // ignora resolutionStrategy para sus managed versions.
+    // Ver: circleguard-auth-service y circleguard-promotion-service → TC 1.20.4
 
     apply(plugin = "java")
     apply(plugin = "org.jetbrains.kotlin.jvm")
