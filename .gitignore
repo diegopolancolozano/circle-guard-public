@@ -64,3 +64,14 @@ kubeconfig-credentials.yaml
 
 infra/terraform/terraform.tfvars
 infra/terraform-gcp/terraform.tfvars
+
+# Credenciales locales (nunca subir a git)
+.env
+.env.do
+kubeconfig.yaml
+kubeconfig-gke
+kubeconfig-do.yaml
+infra/terraform-gcp/kubeconfig.yaml
+qr-secret-copy.yaml
+qr-secret-867gh548fg.yaml
+**/backend.hcl
