@@ -1,172 +1,146 @@
 #!/usr/bin/env bash
 # =============================================================================
-# CircleGuard — Full Terraform deploy to GCP
+# CircleGuard — Terraform deploy a GCP
 #
-# Usage:
-#   ./scripts/ci/terraform-deploy.sh [stage|prod] [plan|apply|destroy]
+# Uso:
+#   bash scripts/ci/terraform-deploy.sh [stage|prod] [plan|apply|destroy]
 #
-# Prerequisites:
-#   - GOOGLE_APPLICATION_CREDENTIALS pointing to a SA key JSON OR gcloud ADC
-#   - Terraform >= 1.6 installed
-#   - gcloud CLI installed and configured
+# Requisito previo:
+#   cp .env.example .env   # y rellena tus credenciales GCP
 #
-# Sequence:
-#   1. (first run only) terraform-gcp/dev — creates the GCS tfstate bucket
-#   2. terraform-gcp/<env>             — creates VPC + GKE + Jenkins VM
-#   3. (wait for GKE)                  — poll until cluster is RUNNING
-#   4. terraform (k8s)/<env>           — creates namespaces + K8s secrets
+# Secuencia:
+#   1. (primera vez) bootstrap del bucket GCS de estado
+#   2. terraform-gcp/<env>  — VPC + GKE + Jenkins VM
+#   3. Esperar a que el cluster esté RUNNING
+#   4. terraform-k8s/<env>  — namespaces + Docker pull secret + QR secret
 # =============================================================================
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/load-env.sh"
 
 ENV="${1:-stage}"
 ACTION="${2:-apply}"
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TF_GCP_DIR="${REPO_ROOT}/infra/terraform-gcp/environments/${ENV}"
 TF_K8S_DIR="${REPO_ROOT}/infra/terraform/environments/${ENV}"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+log()  { echo -e "${GREEN}[TF-GCP]${NC} $*"; }
+warn() { echo -e "${YELLOW}[TF-GCP]${NC} $*"; }
+err()  { echo -e "${RED}[TF-GCP] ERROR:${NC} $*" >&2; exit 1; }
 
-log()  { echo -e "${GREEN}[TF-DEPLOY]${NC} $*"; }
-warn() { echo -e "${YELLOW}[TF-DEPLOY]${NC} $*"; }
-err()  { echo -e "${RED}[TF-DEPLOY] ERROR:${NC} $*" >&2; exit 1; }
+# ── Validaciones ──────────────────────────────────────────────────────────────
+[[ "${ENV}" =~ ^(dev|stage|prod)$ ]] || err "ENV debe ser dev, stage o prod."
+[[ "${ACTION}" =~ ^(plan|apply|destroy)$ ]] || err "ACTION debe ser plan, apply o destroy."
+: "${GCP_PROJECT:?Falta GCP_PROJECT en .env}"
+: "${GOOGLE_APPLICATION_CREDENTIALS:?Falta GCP_SA_FILE en .env}"
+[[ -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]] || err "El archivo GCP_SA_FILE no existe: ${GOOGLE_APPLICATION_CREDENTIALS}"
+command -v terraform &>/dev/null || err "terraform no está instalado"
+command -v gcloud    &>/dev/null || err "gcloud no está instalado"
 
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
-[[ "${ENV}" =~ ^(dev|stage|prod)$ ]] || err "ENV must be dev, stage, or prod. Got: ${ENV}"
-[[ "${ACTION}" =~ ^(plan|apply|destroy)$ ]] || err "ACTION must be plan, apply, or destroy. Got: ${ACTION}"
+# Terraform lee TF_VAR_* automáticamente — exportar los que vienen del .env
+export TF_VAR_project_id="${GCP_PROJECT}"
+export TF_VAR_ssh_user="${GCP_SSH_USER:-deployer}"
+# TF_VAR_ssh_public_key ya fue exportado por load-env.sh si SSH_PUBLIC_KEY estaba seteado
 
-command -v terraform &>/dev/null || err "terraform not found in PATH"
-command -v gcloud    &>/dev/null || err "gcloud not found in PATH"
+# Si SSH_PUBLIC_KEY estaba vacío en .env, leer del sistema
+if [[ -z "${TF_VAR_ssh_public_key:-}" ]]; then
+  SSH_KEY="${HOME}/.ssh/id_rsa"
+  if [[ ! -f "${SSH_KEY}" ]]; then
+    log "Generando clave SSH en ${SSH_KEY}..."
+    ssh-keygen -t rsa -b 4096 -f "${SSH_KEY}" -N "" -C "circleguard-gcp"
+  fi
+  export TF_VAR_ssh_public_key
+  TF_VAR_ssh_public_key="$(cat "${SSH_KEY}.pub")"
+fi
 
-[[ -d "${TF_GCP_DIR}" ]] || err "Directory not found: ${TF_GCP_DIR}"
-[[ -d "${TF_K8S_DIR}" ]] || err "Directory not found: ${TF_K8S_DIR}"
+# K8s secrets terraform también usa TF_VAR_
+export TF_VAR_dockerhub_username="${DOCKERHUB_USERNAME:-}"
+export TF_VAR_dockerhub_password="${DOCKERHUB_PASSWORD:-}"
+export TF_VAR_dockerhub_email="${DOCKERHUB_EMAIL:-devops@circleguard.local}"
+export TF_VAR_qr_secret="${QR_SECRET:-}"
+export TF_VAR_use_gke="true"
+export TF_VAR_gcp_project="${GCP_PROJECT}"
+export TF_VAR_gke_cluster_name="${GKE_CLUSTER_NAME:-circleguard-${ENV}}"
+export TF_VAR_gke_cluster_location="${GKE_CLUSTER_LOCATION:-us-central1}"
 
-[[ -f "${TF_GCP_DIR}/terraform.tfvars" ]] || \
-  err "Missing ${TF_GCP_DIR}/terraform.tfvars — copy and fill in terraform.tfvars.example"
+# ── Validar vars sensibles requeridas ─────────────────────────────────────────
+if [[ "${ACTION}" == "apply" ]]; then
+  : "${DOCKERHUB_USERNAME:?Falta DOCKERHUB_USERNAME en .env}"
+  : "${DOCKERHUB_PASSWORD:?Falta DOCKERHUB_PASSWORD en .env}"
+  : "${QR_SECRET:?Falta QR_SECRET en .env}"
+fi
 
-[[ -f "${TF_K8S_DIR}/terraform.tfvars" ]] || \
-  err "Missing ${TF_K8S_DIR}/terraform.tfvars — copy and fill in terraform.tfvars"
+# ── Auth GCP ──────────────────────────────────────────────────────────────────
+log "Activando Service Account GCP..."
+gcloud auth activate-service-account --key-file="${GOOGLE_APPLICATION_CREDENTIALS}"
+gcloud config set project "${GCP_PROJECT}" >/dev/null
 
-# ---------------------------------------------------------------------------
-# Step 0: Bootstrap GCS bucket (only needed once; dev env creates it)
-# ---------------------------------------------------------------------------
+# ── Paso 0: bootstrap del bucket GCS (solo primera vez) ──────────────────────
 bootstrap_bucket() {
-  local BUCKET_NAME="circleguard-tfstate"
-
-  if gcloud storage buckets describe "gs://${BUCKET_NAME}" &>/dev/null; then
-    log "GCS bucket '${BUCKET_NAME}' already exists — skipping bootstrap."
+  local BUCKET="circleguard-tfstate"
+  if gcloud storage buckets describe "gs://${BUCKET}" &>/dev/null; then
+    log "Bucket GCS '${BUCKET}' ya existe."
     return 0
   fi
-
-  warn "GCS bucket '${BUCKET_NAME}' not found. Running dev bootstrap..."
+  warn "Bucket '${BUCKET}' no encontrado. Ejecutando bootstrap (env dev)..."
   local DEV_DIR="${REPO_ROOT}/infra/terraform-gcp/environments/dev"
-  [[ -f "${DEV_DIR}/terraform.tfvars" ]] || \
-    err "Please fill in ${DEV_DIR}/terraform.tfvars before first run."
-
-  (
-    cd "${DEV_DIR}"
-    terraform init -input=false
-    terraform apply -auto-approve -input=false
-  )
-  log "Bootstrap complete."
+  ( cd "${DEV_DIR}" && terraform init -input=false && terraform apply -auto-approve -input=false )
+  log "Bootstrap completo."
 }
 
-# ---------------------------------------------------------------------------
-# Step 1: GCP infrastructure (VPC + GKE + VMs)
-# ---------------------------------------------------------------------------
+# ── Paso 1: GCP infra (VPC + GKE + Jenkins VM) ───────────────────────────────
 deploy_gcp_infra() {
-  log "=== Step 1: terraform-gcp/${ENV} ==="
+  log "=== terraform-gcp/${ENV} ==="
   (
     cd "${TF_GCP_DIR}"
-    terraform init -input=false -upgrade
-    if [[ "${ACTION}" == "plan" ]]; then
-      terraform plan -input=false
-    elif [[ "${ACTION}" == "apply" ]]; then
-      terraform apply -auto-approve -input=false
-    elif [[ "${ACTION}" == "destroy" ]]; then
-      warn "Destroying GCP infrastructure for ${ENV}..."
-      terraform destroy -auto-approve -input=false
-      return 0
-    fi
+    terraform init -input=false -upgrade -reconfigure
+    case "${ACTION}" in
+      plan)    terraform plan -input=false ;;
+      apply)   terraform apply -auto-approve -input=false
+               log "=== Outputs ===" && terraform output ;;
+      destroy) warn "Destruyendo GCP infra (${ENV})..."
+               terraform destroy -auto-approve -input=false ;;
+    esac
   )
 }
 
-# ---------------------------------------------------------------------------
-# Step 2: Wait for GKE cluster to be RUNNING
-# ---------------------------------------------------------------------------
+# ── Paso 2: Esperar al cluster GKE ───────────────────────────────────────────
 wait_for_gke() {
-  # Extract project_id and cluster_name from tfvars (rough parse)
-  local PROJECT_ID
-  PROJECT_ID=$(grep 'project_id' "${TF_GCP_DIR}/terraform.tfvars" | head -1 | sed 's/.*=\s*"\(.*\)".*/\1/')
-
-  local CLUSTER_NAME
-  CLUSTER_NAME=$(grep 'gke_cluster_name' "${TF_GCP_DIR}/terraform.tfvars" | head -1 | sed 's/.*=\s*"\(.*\)".*/\1/')
-
-  local REGION
-  REGION=$(grep 'region' "${TF_GCP_DIR}/terraform.tfvars" | grep -v '#' | head -1 | sed 's/.*=\s*"\(.*\)".*/\1/')
-  REGION="${REGION:-us-central1}"
-
-  # Defaults from variables.tf if not set in tfvars
-  CLUSTER_NAME="${CLUSTER_NAME:-circleguard-${ENV}}"
-
-  log "=== Step 2: Waiting for GKE cluster '${CLUSTER_NAME}' to be RUNNING ==="
-  local MAX_WAIT=600  # 10 minutes
-  local ELAPSED=0
-  local STATUS=""
-
-  while [[ "${STATUS}" != "RUNNING" && ${ELAPSED} -lt ${MAX_WAIT} ]]; do
-    STATUS=$(gcloud container clusters describe "${CLUSTER_NAME}" \
-      --region="${REGION}" \
-      --project="${PROJECT_ID}" \
+  log "Esperando que el cluster '${TF_VAR_gke_cluster_name}' esté RUNNING..."
+  local MAX=600 ELAPSED=0 STATUS=""
+  while [[ "${STATUS}" != "RUNNING" && ${ELAPSED} -lt ${MAX} ]]; do
+    STATUS=$(gcloud container clusters describe "${TF_VAR_gke_cluster_name}" \
+      --region="${TF_VAR_gke_cluster_location}" \
+      --project="${GCP_PROJECT}" \
       --format="value(status)" 2>/dev/null || echo "PENDING")
-
-    if [[ "${STATUS}" == "RUNNING" ]]; then
-      log "Cluster is RUNNING."
-      break
-    fi
-
-    warn "Cluster status: ${STATUS}. Waiting 20s... (${ELAPSED}s elapsed)"
-    sleep 20
-    ELAPSED=$((ELAPSED + 20))
+    [[ "${STATUS}" == "RUNNING" ]] && break
+    warn "Estado: ${STATUS}. Esperando 20s... (${ELAPSED}s/${MAX}s)"
+    sleep 20; ELAPSED=$((ELAPSED + 20))
   done
-
-  [[ "${STATUS}" == "RUNNING" ]] || err "Cluster did not reach RUNNING state within ${MAX_WAIT}s"
-
-  # Configure kubeconfig
-  gcloud container clusters get-credentials "${CLUSTER_NAME}" \
-    --region="${REGION}" \
-    --project="${PROJECT_ID}"
-  log "kubeconfig updated for cluster '${CLUSTER_NAME}'."
+  [[ "${STATUS}" == "RUNNING" ]] || err "El cluster no llegó a RUNNING en ${MAX}s"
+  gcloud container clusters get-credentials "${TF_VAR_gke_cluster_name}" \
+    --region="${TF_VAR_gke_cluster_location}" --project="${GCP_PROJECT}"
+  log "kubeconfig: $(kubectl config current-context)"
 }
 
-# ---------------------------------------------------------------------------
-# Step 3: K8s secrets (namespaces + Docker pull secret + QR secret)
-# ---------------------------------------------------------------------------
+# ── Paso 3: K8s secrets (namespaces + docker pull secret + QR secret) ────────
 deploy_k8s_secrets() {
-  log "=== Step 3: terraform (k8s)/${ENV} ==="
+  log "=== terraform-k8s/${ENV} ==="
   (
     cd "${TF_K8S_DIR}"
-    terraform init -input=false -upgrade
-    if [[ "${ACTION}" == "plan" ]]; then
-      terraform plan -input=false
-    elif [[ "${ACTION}" == "apply" ]]; then
-      terraform apply -auto-approve -input=false
-    elif [[ "${ACTION}" == "destroy" ]]; then
-      warn "Destroying K8s secrets for ${ENV}..."
-      terraform destroy -auto-approve -input=false
-    fi
+    terraform init -input=false -upgrade -reconfigure
+    case "${ACTION}" in
+      plan)    terraform plan -input=false ;;
+      apply)   terraform apply -auto-approve -input=false ;;
+      destroy) terraform destroy -auto-approve -input=false ;;
+    esac
   )
 }
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-log "CircleGuard Terraform Deploy — env=${ENV}, action=${ACTION}"
+# ── Main ──────────────────────────────────────────────────────────────────────
+log "CircleGuard GCP deploy — env=${ENV}, action=${ACTION}"
 
 if [[ "${ACTION}" == "apply" ]]; then
   bootstrap_bucket
@@ -174,18 +148,18 @@ if [[ "${ACTION}" == "apply" ]]; then
   wait_for_gke
   deploy_k8s_secrets
   log ""
-  log "====================================================="
-  log " Deploy complete for environment: ${ENV}"
-  log "====================================================="
-  log " Next steps:"
+  log "========================================================"
+  log " Deploy completo — GCP ${ENV}"
+  log "========================================================"
+  log " Siguientes pasos:"
   log "   kubectl apply -k k8s/overlays/${ENV}"
-  log "   kubectl apply -k k8s/monitoring"
   log "   kubectl get pods -n ${ENV}"
+  log "========================================================"
 elif [[ "${ACTION}" == "plan" ]]; then
   deploy_gcp_infra
   deploy_k8s_secrets
 elif [[ "${ACTION}" == "destroy" ]]; then
   deploy_k8s_secrets
   deploy_gcp_infra
-  log "Destroy complete for environment: ${ENV}"
+  log "Destroy completo para ${ENV}"
 fi

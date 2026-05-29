@@ -75,7 +75,7 @@ resource "kubernetes_secret_v1" "qr_secret" {
   }
 
   data = {
-    QR_SECRET = var.qr_secret
+    qr_secret = var.qr_secret
   }
 
   depends_on = [kubernetes_namespace_v1.env]
