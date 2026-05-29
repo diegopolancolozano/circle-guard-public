@@ -69,6 +69,10 @@ subprojects {
     }
 
     tasks.withType<Test> {
+        // docker-java 3.x defaults to API 1.32; Docker 29.x requires min 1.40.
+        // Hardcode aquí para que el JVM forkeado por Gradle reciba el env var
+        // independiente del daemon o del entorno Jenkins.
+        environment("DOCKER_API_VERSION", "1.41")
         useJUnitPlatform()
         finalizedBy("jacocoTestReport")
     }
