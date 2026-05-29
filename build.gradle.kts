@@ -24,6 +24,19 @@ sonarqube {
 }
 
 subprojects {
+    // Forzar Testcontainers 1.20.x — Spring Boot 3.2.4 trae 1.19.7 que tiene un bug
+    // con Docker 23+ (API mínima 1.40). La 1.20.0 lo corrige.
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.testcontainers") {
+                useVersion("1.20.4")
+            }
+            if (requested.group == "com.github.docker-java") {
+                useVersion("3.4.0")
+            }
+        }
+    }
+
     apply(plugin = "java")
     apply(plugin = "org.jetbrains.kotlin.jvm")
     apply(plugin = "jacoco")
