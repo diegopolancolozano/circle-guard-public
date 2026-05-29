@@ -10,7 +10,7 @@
 #
 # Arguments:
 #   tags          Comma-separated list of image tags, e.g. "stage,0.2.1"
-#   image-prefix  DockerHub prefix, e.g. "diegopolancolozano/circleguard"
+#   image-prefix  DockerHub prefix, e.g. "diegoapolancol/circleguard"
 #   docker-user   DockerHub username
 #   docker-pass   DockerHub access token / password
 # =============================================================================
