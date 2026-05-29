@@ -3,7 +3,7 @@ package com.circleguard.promotion.model;
 import jakarta.persistence.*;
 import lombok.*;
 import java.util.UUID;
-//
+///
 @Entity
 @Table(name = "access_points")
 @Data
