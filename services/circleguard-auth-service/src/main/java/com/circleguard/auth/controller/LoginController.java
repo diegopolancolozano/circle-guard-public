@@ -1,7 +1,7 @@
 package com.circleguard.auth.controller;
 
+import com.circleguard.auth.service.IdentityMappingService;
 import com.circleguard.auth.service.JwtTokenService;
-import com.circleguard.auth.client.IdentityClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.*;
@@ -16,7 +16,7 @@ public class LoginController {
 
     private final AuthenticationManager authManager;
     private final JwtTokenService jwtService;
-    private final IdentityClient identityClient;
+    private final IdentityMappingService identityMappingService;
 
     @PostMapping("/login")
     public ResponseEntity<Map<String, String>> login(@RequestBody Map<String, String> request) {
@@ -30,7 +30,7 @@ public class LoginController {
 
         // 2. Anonymize (Fetch/Create Anonymous ID from Identity Service)
         // For PoC, we assume the user's 'realIdentity' is their email/username
-        UUID anonymousId = identityClient.getAnonymousId(username);
+        UUID anonymousId = identityMappingService.resolveAnonymousId(username);
 
         // 3. Issue Token
         String token = jwtService.generateToken(anonymousId, auth);
