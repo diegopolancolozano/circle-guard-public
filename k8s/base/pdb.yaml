@@ -1,0 +1,64 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: circleguard-auth-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: circleguard-auth-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: circleguard-identity-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: circleguard-identity-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: circleguard-promotion-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: circleguard-promotion-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: circleguard-gateway-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: circleguard-gateway-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: circleguard-dashboard-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: circleguard-dashboard-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: circleguard-file-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: circleguard-file-service
