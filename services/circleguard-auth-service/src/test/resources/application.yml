@@ -2,6 +2,10 @@ jwt:
   secret: "my-super-secret-test-key-32-chars-long"
   expiration: 3600000
 
+qr:
+  secret: "my-super-secret-test-key-32-chars-long"
+  expiration: 60000
+
 features:
   identity:
     use-remote: false
