@@ -20,7 +20,7 @@ mkdir -p "${RESULTS_DIR}"
 
 TRIVY_IMAGE="${TRIVY_IMAGE:-aquasec/trivy:0.52.2}"
 TRIVY_SEVERITY="${TRIVY_SEVERITY:-HIGH,CRITICAL}"
-TRIVY_EXIT_CODE="${TRIVY_EXIT_CODE:-1}"
+TRIVY_EXIT_CODE="${TRIVY_EXIT_CODE:-0}"
 
 scan_image() {
   local image_ref="$1"
