@@ -281,9 +281,9 @@ pipeline {
                             """
                         }
                     }
-                    // Sanity check
+                    // Sanity check (--short removed in kubectl 1.28+)
                     withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
-                        sh "kubectl version --client --short || kubectl version --client"
+                        sh "kubectl version --client"
                         sh "kubectl config current-context"
                     }
                 }
