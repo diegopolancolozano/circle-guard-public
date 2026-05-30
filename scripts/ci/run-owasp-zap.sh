@@ -15,57 +15,43 @@ TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 RESULTS_DIR="${WORKSPACE:-${PWD}}/tests/security/results"
 mkdir -p "${RESULTS_DIR}"
 
-SERVICE_NAME="circleguard-gateway-service"
-LOCAL_PORT=18083
-REMOTE_PORT=8080
-LOCAL_URL="http://127.0.0.1:${LOCAL_PORT}"
-PF_LOG="/tmp/zap-pf-${LOCAL_PORT}.log"
+TARGET_URL="http://circleguard-gateway-service:8080"
+ZAP_POD="zap-${TIMESTAMP}"
 
 cleanup() {
-  pkill -f "port-forward.*${LOCAL_PORT}:" >/dev/null 2>&1 || true
+  kubectl -n "${ENVIRONMENT}" delete pod "${ZAP_POD}" --ignore-not-found >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-wait_for_health() {
-  local max_attempts=45
-  local sleep_secs=2
-  local attempt
+# Wait for gateway to be available before scanning
+echo "[zap] Waiting for gateway deployment..." >&2
+kubectl -n "${ENVIRONMENT}" wait --for=condition=Available \
+  "deployment/circleguard-gateway-service" --timeout=180s
 
-  for attempt in $(seq 1 "$max_attempts"); do
-    if curl -fsS "${LOCAL_URL}/actuator/health" >/dev/null 2>&1; then
-      echo "[zap] ${LOCAL_URL} UP (attempt ${attempt})" >&2
-      return 0
-    fi
-    sleep "$sleep_secs"
-  done
+# Run ZAP as an in-cluster pod so it can reach services via cluster DNS.
+# Docker-outside-of-Docker makes --network=host unreliable for port-forwards:
+# the port-forward lives in the Jenkins container network, but docker run
+# --network=host binds to the HOST network — two different namespaces.
+echo "[zap] Running baseline scan in-cluster against ${TARGET_URL}" >&2
+kubectl -n "${ENVIRONMENT}" run "${ZAP_POD}" \
+  --image=ghcr.io/zaproxy/zaproxy:stable \
+  --restart=Never \
+  --command -- zap-baseline.py \
+    -t "${TARGET_URL}" \
+    -I
 
-  echo "ERROR: port-forward at ${LOCAL_URL} did not become ready" >&2
-  if [ -f "${PF_LOG}" ]; then
-    echo "=== Port-forward log ===" >&2
-    cat "${PF_LOG}" >&2 || true
-  fi
-  return 1
-}
+# Wait up to 10 minutes for scan to finish
+kubectl -n "${ENVIRONMENT}" wait --for=condition=Ready \
+  "pod/${ZAP_POD}" --timeout=120s 2>/dev/null || true
 
-# Kill any stale port-forward on this port
-pkill -f "port-forward.*${LOCAL_PORT}:" >/dev/null 2>&1 || true
-sleep 2
+kubectl -n "${ENVIRONMENT}" wait "pod/${ZAP_POD}" \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=600s 2>/dev/null || \
+  kubectl -n "${ENVIRONMENT}" wait "pod/${ZAP_POD}" \
+    --for=jsonpath='{.status.phase}'=Failed --timeout=30s 2>/dev/null || \
+  echo "[zap] Timeout waiting for pod completion" >&2
 
-echo "[zap] Starting port-forward: ${SERVICE_NAME} -> ${LOCAL_URL}" >&2
-kubectl -n "${ENVIRONMENT}" port-forward "svc/${SERVICE_NAME}" "${LOCAL_PORT}:${REMOTE_PORT}" --address 127.0.0.1 >"${PF_LOG}" 2>&1 &
+# Capture logs as the scan report artifact
+LOG_FILE="${RESULTS_DIR}/zap-${ENVIRONMENT}-${TIMESTAMP}.txt"
+kubectl -n "${ENVIRONMENT}" logs "${ZAP_POD}" 2>/dev/null | tee "${LOG_FILE}" || true
 
-wait_for_health
-
-REPORT_HTML="zap-${ENVIRONMENT}-${TIMESTAMP}.html"
-REPORT_JSON="zap-${ENVIRONMENT}-${TIMESTAMP}.json"
-REPORT_MD="zap-${ENVIRONMENT}-${TIMESTAMP}.md"
-
-echo "[zap] Running baseline scan against ${LOCAL_URL}" >&2
-
-docker run --rm \
-  --network=host \
-  -v "${RESULTS_DIR}:/zap/wrk:rw" \
-  ghcr.io/zaproxy/zaproxy:stable \
-  zap-baseline.py -t "${LOCAL_URL}" -r "${REPORT_HTML}" -J "${REPORT_JSON}" -w "${REPORT_MD}" -I
-
-echo "[zap] Reports saved in ${RESULTS_DIR}"
+echo "[zap] Report saved to ${LOG_FILE}" >&2
