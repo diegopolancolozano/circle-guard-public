@@ -60,6 +60,14 @@ subprojects {
         }
     }
 
+    // Forkear el compilador Java para que NO use el heap del daemon de Gradle.
+    // En droplet con ~550 MB libres, la compilación in-process de Spring Boot
+    // mata el daemon por OOM. Con fork, el compilador tiene su propio JVM pequeño.
+    tasks.withType<JavaCompile> {
+        options.isFork = true
+        options.forkOptions.memoryMaximumSize = "256m"
+    }
+
     tasks.withType<Test> {
         // Docker 29.x exige API >= 1.40.
         // TC 1.20.4 shadea docker-java-core y lee la versión con la clave "api.version"
