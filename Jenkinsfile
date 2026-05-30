@@ -325,7 +325,12 @@ pipeline {
             }
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    sh "scripts/ci/run-trivy.sh '${env.IMAGE_TAGS}' '${env.DOCKER_IMAGE_PREFIX}'"
+                    script {
+                        // Only scan the first (environment) tag — version tags may not be
+                        // pushed when Build & Push Images skips due to no service changes.
+                        def trivyTag = env.IMAGE_TAGS.split(',')[0]
+                        sh "scripts/ci/run-trivy.sh '${trivyTag}' '${env.DOCKER_IMAGE_PREFIX}'"
+                    }
                 }
             }
             post {
