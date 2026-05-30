@@ -2,6 +2,28 @@ jwt:
   secret: "my-super-secret-test-key-32-chars-long"
   expiration: 3600000
 
+qr:
+  secret: "my-super-secret-test-key-32-chars-long"
+  expiration: 60000
+
+features:
+  identity:
+    use-remote: false
+
+management:
+  tracing:
+    sampling:
+      probability: 0.0
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      identityClient:
+        failure-rate-threshold: 50
+        sliding-window-size: 4
+        permitted-number-of-calls-in-half-open-state: 2
+        wait-duration-in-open-state: 1s
+
 spring:
   main:
     allow-bean-definition-overriding: true

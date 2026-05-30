@@ -65,10 +65,8 @@ echo "=== Deploying infrastructure components ==="
 INFRA_DEPLOYMENTS=(
   "postgres"
   "redis"
-  "neo4j"
   "zookeeper"
   "kafka"
-  "openldap"
 )
 
 for deploy in "${INFRA_DEPLOYMENTS[@]}"; do

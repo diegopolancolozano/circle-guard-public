@@ -1,0 +1,8 @@
+# En dev: OpenLDAP deshabilitado (health check LDAP ya está en false)
+# Neo4j se mantiene en 1 replica porque auth/identity/dashboard lo necesitan
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openldap
+spec:
+  replicas: 0

@@ -1,0 +1,185 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+
+    route:
+      group_by: ['alertname', 'namespace', 'service']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      receiver: 'webhook'
+      routes:
+        - matchers:
+            - severity="critical"
+          receiver: 'webhook'
+          continue: false
+        - matchers:
+            - severity="warning"
+          receiver: 'webhook'
+
+    receivers:
+      - name: 'webhook'
+        webhook_configs:
+          - url: '${PIPELINE_WEBHOOK_URL:-http://localhost/noop}'
+            send_resolved: true
+            http_config:
+              follow_redirects: true
+
+    inhibit_rules:
+      - source_matchers:
+          - severity="critical"
+        target_matchers:
+          - severity="warning"
+        equal: ['alertname', 'namespace', 'service']
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-alert-rules
+  namespace: monitoring
+data:
+  circleguard.rules.yml: |
+    groups:
+      - name: circleguard.availability
+        interval: 30s
+        rules:
+          - alert: ServiceDown
+            expr: up{job="circleguard-services"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Service {{ $labels.service }} is down"
+              description: "{{ $labels.service }} in namespace {{ $labels.namespace }} has been unreachable for more than 1 minute."
+
+          - alert: PodCrashLooping
+            expr: |
+              rate(kube_pod_container_status_restarts_total{namespace=~"dev|stage|prod"}[15m]) * 60 > 0.5
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{ $labels.pod }} is crash-looping"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently."
+
+      - name: circleguard.performance
+        interval: 60s
+        rules:
+          - alert: HighErrorRate
+            expr: |
+              sum(rate(http_server_requests_seconds_count{job="circleguard-services",status=~"5.."}[5m])) by (service)
+              /
+              sum(rate(http_server_requests_seconds_count{job="circleguard-services"}[5m])) by (service)
+              > 0.05
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High 5xx error rate on {{ $labels.service }}"
+              description: "Service {{ $labels.service }} error rate is above 5% for 2 minutes."
+
+          - alert: HighLatency
+            expr: |
+              histogram_quantile(0.95,
+                sum(rate(http_server_requests_seconds_bucket{job="circleguard-services"}[5m])) by (le, service)
+              ) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High p95 latency on {{ $labels.service }}"
+              description: "Service {{ $labels.service }} p95 latency is above 2s."
+
+      - name: circleguard.resources
+        interval: 60s
+        rules:
+          - alert: HighMemoryUsage
+            expr: |
+              jvm_memory_used_bytes{area="heap", job="circleguard-services"}
+              /
+              jvm_memory_max_bytes{area="heap", job="circleguard-services"}
+              > 0.85
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High heap usage on {{ $labels.service }}"
+              description: "JVM heap usage on {{ $labels.service }} ({{ $labels.pod }}) is above 85%."
+
+      - name: circleguard.resilience
+        interval: 30s
+        rules:
+          - alert: CircuitBreakerOpen
+            expr: resilience4j_circuitbreaker_state{job="circleguard-services", state="open"} == 1
+            for: 30s
+            labels:
+              severity: critical
+            annotations:
+              summary: "Circuit breaker {{ $labels.name }} is OPEN on {{ $labels.service }}"
+              description: "The circuit breaker {{ $labels.name }} in {{ $labels.service }} has been open for 30s. Fallback strategy is active."
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          args:
+            - "--config.file=/etc/alertmanager/alertmanager.yml"
+            - "--storage.path=/alertmanager"
+          ports:
+            - containerPort: 9093
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - port: 9093
+      targetPort: 9093

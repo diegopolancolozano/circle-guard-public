@@ -10,7 +10,11 @@ This repository includes a Jenkins pipeline in [Jenkinsfile](Jenkinsfile) that r
 6. Run smoke tests on `stage`.
 7. Collect stage evidence from Kubernetes and archive it as a Jenkins artifact.
 8. Run E2E tests and Locust performance tests for `main`.
-9. Generate `release-notes.md` from Conventional Commits.
+9. Scan container images with Trivy and archive reports.
+10. Run OWASP ZAP baseline scan and archive reports.
+11. Compute semantic version and archive it.
+12. Run SonarQube static analysis when configured.
+13. Generate `release-notes.md` from Conventional Commits.
 
 The CI flow is centered on these six microservices:
 

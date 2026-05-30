@@ -1,0 +1,9 @@
+resources:
+  - namespace.yaml
+  - prometheus.yaml
+  - alertmanager.yaml
+  - grafana.yaml
+  - grafana-finops-dashboard.yaml
+  - jaeger.yaml
+  - loki.yaml
+  - elk.yaml

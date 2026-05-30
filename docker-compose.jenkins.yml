@@ -10,9 +10,11 @@ services:
       - "50000:50000"
     environment:
       - JENKINS_OPTS=--httpPort=8080
-      - JAVA_OPTS=-Xmx2048m -Xms512m
+      - JAVA_OPTS=-Xmx1536m -Xms512m
     env_file:
       - .env.jenkins.example
+    extra_hosts:
+      - "kubernetes.docker.internal:host-gateway"
     volumes:
       # Volumen persistente para jenkins_home
       - jenkins-data:/var/jenkins_home

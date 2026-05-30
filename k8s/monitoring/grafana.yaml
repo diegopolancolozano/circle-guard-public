@@ -1,0 +1,200 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus:9090
+        access: proxy
+        isDefault: true
+        editable: false
+      - name: Loki
+        type: loki
+        url: http://loki:3100
+        access: proxy
+        isDefault: false
+        editable: false
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: circleguard
+        folder: CircleGuard
+        type: file
+        options:
+          path: /var/lib/grafana/dashboards
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-circleguard
+  namespace: monitoring
+data:
+  circleguard-overview.json: |
+    {
+      "title": "CircleGuard Services",
+      "uid": "circleguard-overview",
+      "schemaVersion": 38,
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Services Up",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+          "targets": [{
+            "expr": "count(up{job=\"circleguard-services\"} == 1)",
+            "legendFormat": "Up"
+          }],
+          "options": {"colorMode": "background", "graphMode": "none"}
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "HTTP Request Rate (rps)",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+          "targets": [{
+            "expr": "sum(rate(http_server_requests_seconds_count{job=\"circleguard-services\"}[2m])) by (service)",
+            "legendFormat": "{{service}}"
+          }]
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "HTTP p95 Latency (ms)",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+          "targets": [{
+            "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"circleguard-services\"}[2m])) by (le, service)) * 1000",
+            "legendFormat": "{{service}}"
+          }]
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "JVM Heap Used (MB)",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+          "targets": [{
+            "expr": "jvm_memory_used_bytes{area=\"heap\", job=\"circleguard-services\"} / 1024 / 1024",
+            "legendFormat": "{{service}} {{id}}"
+          }]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "HTTP Error Rate (4xx + 5xx)",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+          "targets": [{
+            "expr": "sum(rate(http_server_requests_seconds_count{job=\"circleguard-services\",status=~\"4..|5..\"}[2m])) by (service, status)",
+            "legendFormat": "{{service}} {{status}}"
+          }]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Circuit Breaker State (0=closed, 1=open, 2=half-open)",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+          "targets": [{
+            "expr": "resilience4j_circuitbreaker_state{job=\"circleguard-services\"}",
+            "legendFormat": "{{service}} {{name}}"
+          }]
+        }
+      ],
+      "time": {"from": "now-1h", "to": "now"},
+      "refresh": "30s"
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.4.2
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "circleguard"
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "Viewer"
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboards-provider
+          configMap:
+            name: grafana-dashboards-provider
+        - name: dashboards
+          projected:
+            sources:
+              - configMap:
+                  name: grafana-dashboard-circleguard
+              - configMap:
+                  name: grafana-dashboard-finops
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
