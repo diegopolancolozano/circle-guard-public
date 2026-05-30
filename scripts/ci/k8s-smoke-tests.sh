@@ -105,8 +105,10 @@ assert_http_200_with_retry() {
 }
 
 kubectl -n "$ENVIRONMENT" delete pod "$POD_NAME" --ignore-not-found
-kubectl -n "$ENVIRONMENT" run "$POD_NAME" --image="$IMAGE" --restart=Never --command -- sleep 300
-kubectl -n "$ENVIRONMENT" wait --for=condition=Ready "pod/${POD_NAME}" --timeout=60s
+# sleep 1800 (30 min): deploy + 6x wait_deployment_available + 6x health retries
+# can take up to 15+ min. 300s was too short and caused Completed pod before exec.
+kubectl -n "$ENVIRONMENT" run "$POD_NAME" --image="$IMAGE" --restart=Never --command -- sleep 1800
+kubectl -n "$ENVIRONMENT" wait --for=condition=Ready "pod/${POD_NAME}" --timeout=120s
 
 wait_deployment_available "circleguard-identity-service"
 wait_deployment_available "circleguard-auth-service"
