@@ -3,6 +3,7 @@ package com.circleguard.e2e;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.*;
+import java.io.File;
 
 import java.util.Map;
 import java.util.UUID;
@@ -13,20 +14,69 @@ import static org.hamcrest.Matchers.*;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CircleguardE2ETest {
 
+    private String authBaseUrl;
     private String identityBaseUrl;
     private String promotionBaseUrl;
     private String gatewayBaseUrl;
-        private String formBaseUrl;
+    private String fileBaseUrl;
 
     @BeforeAll
     void setUp() {
+        authBaseUrl = requiredEnv("AUTH_BASE_URL");
         identityBaseUrl = requiredEnv("IDENTITY_BASE_URL");
         promotionBaseUrl = requiredEnv("PROMOTION_BASE_URL");
         gatewayBaseUrl = requiredEnv("GATEWAY_BASE_URL");
-        formBaseUrl = requiredEnv("FORM_BASE_URL");
+        fileBaseUrl = requiredEnv("FILE_BASE_URL");
 
         RestAssured.enableLoggingOfRequestAndResponseIfValidationFails();
     }
+
+    // ── Auth service ──────────────────────────────────────────────────────────
+
+    @Test
+    void authServiceHealthShouldBeUp() {
+        given()
+                .baseUri(authBaseUrl)
+        .when()
+                .get("/actuator/health")
+        .then()
+                .statusCode(200)
+                .body("status", equalTo("UP"));
+    }
+
+    @Test
+    void shouldRejectLoginWithInvalidCredentials() {
+        given()
+                .baseUri(authBaseUrl)
+                .contentType(ContentType.JSON)
+                .body(Map.of("username", "no-such-user-e2e", "password", "wrong"))
+        .when()
+                .post("/api/v1/auth/login")
+        .then()
+                .statusCode(anyOf(equalTo(401), equalTo(403), equalTo(400)));
+    }
+
+    @Test
+    void shouldLoginAndReceiveJwtToken() {
+        String user = System.getenv("LOAD_TEST_USER");
+        String pass = System.getenv("LOAD_TEST_PASS");
+        Assumptions.assumeTrue(user != null && !user.isBlank() && pass != null && !pass.isBlank(),
+                "LOAD_TEST_USER / LOAD_TEST_PASS not set — skipping login happy-path test");
+
+        given()
+                .baseUri(authBaseUrl)
+                .contentType(ContentType.JSON)
+                .body(Map.of("username", user, "password", pass))
+        .when()
+                .post("/api/v1/auth/login")
+        .then()
+                .statusCode(200)
+                .body("token", notNullValue())
+                .body("type", equalTo("Bearer"))
+                .body("anonymousId", matchesPattern("^[0-9a-fA-F-]{36}$"));
+    }
+
+    // ── Identity service ──────────────────────────────────────────────────────
 
     @Test
     void shouldMapIdentityToAnonymousId() {
@@ -75,19 +125,27 @@ class CircleguardE2ETest {
     }
 
     @Test
-    void shouldSubmitHealthSurvey() {
-        given()
-                .baseUri(formBaseUrl)
-                .contentType(ContentType.JSON)
-                .body(Map.of(
-                        "anonymousId", UUID.randomUUID().toString(),
-                        "symptoms", java.util.List.of("COUGH", "FEVER")
-                ))
-        .when()
-                .post("/api/v1/surveys")
-        .then()
-                .statusCode(200)
-                .body("id", notNullValue());
+    void shouldUploadFile() {
+        File tempFile;
+        try {
+            tempFile = File.createTempFile("e2e-upload", ".txt");
+            java.nio.file.Files.writeString(tempFile.toPath(), "e2e-content");
+        } catch (java.io.IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        try {
+            given()
+                    .baseUri(fileBaseUrl)
+                    .multiPart("file", tempFile, "text/plain")
+            .when()
+                    .post("/api/v1/files/upload")
+            .then()
+                    .statusCode(200)
+                    .body("filename", notNullValue());
+        } finally {
+            tempFile.delete();
+        }
     }
 
     @Test
@@ -100,8 +158,25 @@ class CircleguardE2ETest {
                 .statusCode(404);
     }
 
+    @Test
+    void shouldRejectEmptyGatewayToken() {
+        given()
+                .baseUri(gatewayBaseUrl)
+                .contentType(ContentType.JSON)
+                .body(Map.of("token", ""))
+        .when()
+                .post("/api/v1/gate/validate")
+        .then()
+                .statusCode(200)
+                .body("valid", equalTo(false));
+    }
+
     private static String requiredEnv(String key) {
-        String value = System.getenv(key);
+        // Check System properties first (from -D gradle args), then fall back to environment variables
+        String value = System.getProperty(key);
+        if (value == null || value.isBlank()) {
+            value = System.getenv(key);
+        }
         Assumptions.assumeTrue(value != null && !value.isBlank(), () -> key + " no está definido");
         return value.replaceAll("/+$", "");
     }

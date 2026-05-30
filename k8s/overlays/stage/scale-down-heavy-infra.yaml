@@ -1,0 +1,17 @@
+# Scale down memory-heavy infra not needed for E2E tests in stage
+# Neo4j: 1GB heap, not used by smoke/E2E tests
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neo4j
+spec:
+  replicas: 0
+
+---
+# OpenLDAP: auth-service has health.ldap disabled, not needed for tests
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openldap
+spec:
+  replicas: 0

@@ -4,6 +4,7 @@ metadata:
   name: circleguard-identity-service
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -18,6 +19,7 @@ spec:
         app: circleguard-identity-service
     spec:
       terminationGracePeriodSeconds: 30
+      serviceAccountName: circleguard-app
       containers:
         - name: identity
           image: diegoapolancol/circleguard-identity-service:dev
@@ -27,13 +29,25 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
+            - name: SPRING_JPA_OPEN_IN_VIEW
+              value: "false"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
           startupProbe:
             httpGet:
               path: /actuator/health
               port: 8080
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -46,7 +60,7 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
@@ -71,6 +85,12 @@ metadata:
   name: circleguard-auth-service
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: circleguard-auth-service
@@ -79,6 +99,8 @@ spec:
       labels:
         app: circleguard-auth-service
     spec:
+      terminationGracePeriodSeconds: 30
+      serviceAccountName: circleguard-app
       containers:
         - name: auth
           image: diegoapolancol/circleguard-auth-service:dev
@@ -94,13 +116,22 @@ spec:
                 secretKeyRef:
                   name: qr-secret
                   key: qr_secret
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
           startupProbe:
             httpGet:
               path: /actuator/health
               port: 8080
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -113,7 +144,7 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
@@ -138,6 +169,12 @@ metadata:
   name: circleguard-promotion-service
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: circleguard-promotion-service
@@ -146,6 +183,8 @@ spec:
       labels:
         app: circleguard-promotion-service
     spec:
+      terminationGracePeriodSeconds: 30
+      serviceAccountName: circleguard-app
       containers:
         - name: promotion
           image: diegoapolancol/circleguard-promotion-service:dev
@@ -155,13 +194,23 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
           startupProbe:
             httpGet:
               path: /actuator/health
               port: 8081
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -174,7 +223,7 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8081
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
@@ -199,6 +248,12 @@ metadata:
   name: circleguard-gateway-service
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: circleguard-gateway-service
@@ -207,6 +262,8 @@ spec:
       labels:
         app: circleguard-gateway-service
     spec:
+      terminationGracePeriodSeconds: 30
+      serviceAccountName: circleguard-app
       containers:
         - name: gateway
           image: diegoapolancol/circleguard-gateway-service:dev
@@ -222,13 +279,22 @@ spec:
                 secretKeyRef:
                   name: qr-secret
                   key: qr_secret
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
           startupProbe:
             httpGet:
               path: /actuator/health
               port: 8080
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -241,7 +307,7 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
@@ -266,6 +332,12 @@ metadata:
   name: circleguard-dashboard-service
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: circleguard-dashboard-service
@@ -274,6 +346,8 @@ spec:
       labels:
         app: circleguard-dashboard-service
     spec:
+      terminationGracePeriodSeconds: 30
+      serviceAccountName: circleguard-app
       containers:
         - name: dashboard
           image: diegoapolancol/circleguard-dashboard-service:dev
@@ -283,13 +357,23 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "256Mi"
+            limits:
+              cpu: "300m"
+              memory: "512Mi"
           startupProbe:
             httpGet:
               path: /actuator/health
               port: 8080
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -302,7 +386,7 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
@@ -327,6 +411,12 @@ metadata:
   name: circleguard-file-service
 spec:
   replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
   selector:
     matchLabels:
       app: circleguard-file-service
@@ -335,6 +425,8 @@ spec:
       labels:
         app: circleguard-file-service
     spec:
+      terminationGracePeriodSeconds: 30
+      serviceAccountName: circleguard-app
       containers:
         - name: file
           image: diegoapolancol/circleguard-file-service:dev
@@ -344,13 +436,23 @@ spec:
           envFrom:
             - secretRef:
                 name: app-config
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx384m"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "256Mi"
+            limits:
+              cpu: "300m"
+              memory: "512Mi"
           startupProbe:
             httpGet:
               path: /actuator/health
               port: 8080
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -363,7 +465,7 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
