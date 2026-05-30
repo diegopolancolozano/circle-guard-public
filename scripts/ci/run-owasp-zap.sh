@@ -65,7 +65,7 @@ echo "[zap] Running baseline scan against ${LOCAL_URL}" >&2
 docker run --rm \
   --network=host \
   -v "${RESULTS_DIR}:/zap/wrk:rw" \
-  owasp/zap2docker-stable \
+  ghcr.io/zaproxy/zaproxy:stable \
   zap-baseline.py -t "${LOCAL_URL}" -r "${REPORT_HTML}" -J "${REPORT_JSON}" -w "${REPORT_MD}" -I
 
 echo "[zap] Reports saved in ${RESULTS_DIR}"
