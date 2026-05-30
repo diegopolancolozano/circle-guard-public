@@ -144,6 +144,7 @@ echo "[Locust] Testing docker mount for ${LOCUST_DIR}"
 if docker run --rm -v "${LOCUST_DIR}:/mnt/performance" busybox ls /mnt/performance/locustfile.py >/dev/null 2>&1; then
   echo "[Locust] Docker mount succeeded - running via docker run"
   docker run --rm \
+    --network=host \
     -e AUTH_BASE_URL="$AUTH_BASE_URL" \
     -e IDENTITY_BASE_URL="$IDENTITY_BASE_URL" \
     -e GATEWAY_BASE_URL="$GATEWAY_BASE_URL" \
