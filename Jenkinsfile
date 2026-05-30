@@ -26,13 +26,13 @@ pipeline {
     parameters {
         choice(
             name: 'PIPELINE_MODE',
-            choices: ['reduced', 'full'],
-            description: 'reduced = build + tests only; full = deploy + smoke/perf/release flow'
+            choices: ['full', 'reduced'],
+            description: 'full = deploy + smoke/perf/release flow; reduced = build + tests only'
         )
         choice(
             name: 'CLOUD_TARGET',
-            choices: ['gcp', 'digitalocean', 'local', 'multi'],
-            description: 'Target cloud for full mode. multi = run DO + GCP sequentially (two builds).'
+            choices: ['digitalocean', 'gcp', 'local', 'multi'],
+            description: 'Target cloud. digitalocean = DOKS; gcp = GKE; multi = DO + GCP sequentially.'
         )
         string(
             name: 'GCP_PROJECT',
@@ -90,8 +90,16 @@ pipeline {
         stage("Resolve Environment") {
             steps {
                 script {
-                    env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'reduced').trim()
-                    env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'gcp').trim()
+                    env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'full').trim()
+                    env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'digitalocean').trim()
+
+                    // Builds automáticos (webhook) en ramas de despliegue → siempre full + DO
+                    def isWebhook = !currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
+                    if (isWebhook && env.BRANCH_NAME in ['dev', 'stage', 'main']) {
+                        env.PIPELINE_MODE = 'full'
+                        if (env.CLOUD_TARGET == 'gcp') { env.CLOUD_TARGET = 'digitalocean' }
+                        echo "Build automático en ${env.BRANCH_NAME} → PIPELINE_MODE=full, CLOUD_TARGET=${env.CLOUD_TARGET}"
+                    }
 
                     switch (env.BRANCH_NAME) {
                         case "dev":
