@@ -63,10 +63,11 @@ subprojects {
     tasks.withType<Test> {
         // Docker 29.x exige API >= 1.40.
         // TC 1.20.4 shadea docker-java-core y lee la versión con la clave "api.version"
-        // (NO "DOCKER_API_VERSION"). Equivalente en env var: "API_VERSION".
-        // Verificado decompilando DefaultDockerClientConfig de testcontainers-1.20.4.jar.
+        // (NO "DOCKER_API_VERSION"). Verificado decompilando DefaultDockerClientConfig.
         systemProperty("api.version", "1.41")
         environment("API_VERSION", "1.41")
+        // Limitar heap del JVM de test: en el droplet solo hay ~700 MB libres al compilar.
+        maxHeapSize = "256m"
         useJUnitPlatform()
         finalizedBy("jacocoTestReport")
     }
