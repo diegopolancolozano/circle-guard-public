@@ -26,8 +26,10 @@ scan_image() {
   local image_ref="$1"
   local safe_name="$2"
 
+  # trivy-cache persists the vuln DB across builds — avoids re-downloading on every run
   docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
+    -v trivy-cache:/root/.cache/trivy \
     -v "${RESULTS_DIR}:/output" \
     "${TRIVY_IMAGE}" \
     image --severity "${TRIVY_SEVERITY}" --ignore-unfixed \
@@ -37,6 +39,7 @@ scan_image() {
 
   docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
+    -v trivy-cache:/root/.cache/trivy \
     -v "${RESULTS_DIR}:/output" \
     "${TRIVY_IMAGE}" \
     image --severity "${TRIVY_SEVERITY}" --ignore-unfixed \
