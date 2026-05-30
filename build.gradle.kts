@@ -61,11 +61,12 @@ subprojects {
     }
 
     tasks.withType<Test> {
-        // Docker 29.x exige API >= 1.40; docker-java defaultea a 1.32.
-        // Setear como env var Y system property para que el JVM forkeado
-        // lo reciba sin importar el Gradle daemon ni el entorno Jenkins.
-        environment("DOCKER_API_VERSION", "1.41")
-        systemProperty("DOCKER_API_VERSION", "1.41")
+        // Docker 29.x exige API >= 1.40.
+        // TC 1.20.4 shadea docker-java-core y lee la versión con la clave "api.version"
+        // (NO "DOCKER_API_VERSION"). Equivalente en env var: "API_VERSION".
+        // Verificado decompilando DefaultDockerClientConfig de testcontainers-1.20.4.jar.
+        systemProperty("api.version", "1.41")
+        environment("API_VERSION", "1.41")
         useJUnitPlatform()
         finalizedBy("jacocoTestReport")
     }
