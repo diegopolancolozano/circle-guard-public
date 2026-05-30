@@ -490,7 +490,7 @@ pipeline {
             }
             post {
                 always {
-                    archiveArtifacts artifacts: "tests/security/results/zap-*.html, tests/security/results/zap-*.json, tests/security/results/zap-*.md", allowEmptyArchive: true
+                    archiveArtifacts artifacts: "tests/security/results/zap-*.html, tests/security/results/zap-*.json, tests/security/results/zap-*.md, tests/security/results/zap-*.txt", allowEmptyArchive: true
                 }
             }
         }
