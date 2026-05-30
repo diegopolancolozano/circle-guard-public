@@ -24,6 +24,11 @@ sonarqube {
 }
 
 subprojects {
+    // Nota: la versión de Testcontainers se fija directamente en cada servicio
+    // (services/*/build.gradle.kts) porque io.spring.dependency-management
+    // ignora resolutionStrategy para sus managed versions.
+    // Ver: circleguard-auth-service y circleguard-promotion-service → TC 1.20.4
+
     apply(plugin = "java")
     apply(plugin = "org.jetbrains.kotlin.jvm")
     apply(plugin = "jacoco")
@@ -55,7 +60,22 @@ subprojects {
         }
     }
 
+    // Forkear el compilador Java para que NO use el heap del daemon de Gradle.
+    // En droplet con ~550 MB libres, la compilación in-process de Spring Boot
+    // mata el daemon por OOM. Con fork, el compilador tiene su propio JVM pequeño.
+    tasks.withType<JavaCompile> {
+        options.isFork = true
+        options.forkOptions.memoryMaximumSize = "256m"
+    }
+
     tasks.withType<Test> {
+        // Docker 29.x exige API >= 1.40.
+        // TC 1.20.4 shadea docker-java-core y lee la versión con la clave "api.version"
+        // (NO "DOCKER_API_VERSION"). Verificado decompilando DefaultDockerClientConfig.
+        systemProperty("api.version", "1.41")
+        environment("API_VERSION", "1.41")
+        // Limitar heap del JVM de test: en el droplet solo hay ~700 MB libres al compilar.
+        maxHeapSize = "256m"
         useJUnitPlatform()
         finalizedBy("jacocoTestReport")
     }
