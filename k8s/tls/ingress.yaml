@@ -1,0 +1,75 @@
+##############################################################################
+# Ingress — TLS for CircleGuard public services
+#
+# HOST variable: replace GATEWAY_DOMAIN with your actual domain.
+# If you don't have a domain you can use nip.io free wildcard DNS:
+#   LOAD_BALANCER_IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
+#     -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+#   export GATEWAY_DOMAIN="gateway.${LOAD_BALANCER_IP}.nip.io"
+#
+# Then apply with envsubst:
+#   envsubst < k8s/tls/ingress.yaml | kubectl apply -f -
+#
+# Or substitute manually before applying.
+##############################################################################
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: circleguard-gateway-ingress
+  namespace: stage
+  annotations:
+    # Switch to letsencrypt-prod once staging certificates work correctly
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - "${GATEWAY_DOMAIN}"
+      secretName: circleguard-gateway-tls
+  rules:
+    - host: "${GATEWAY_DOMAIN}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: circleguard-gateway-service
+                port:
+                  number: 8080
+
+---
+# ── Prod namespace Ingress (same host, different namespace) ────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: circleguard-gateway-ingress
+  namespace: prod
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - "${GATEWAY_DOMAIN}"
+      secretName: circleguard-gateway-tls
+  rules:
+    - host: "${GATEWAY_DOMAIN}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: circleguard-gateway-service
+                port:
+                  number: 8080

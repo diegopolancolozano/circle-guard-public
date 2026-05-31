@@ -1,0 +1,170 @@
+##############################################################################
+# VirtualServices — traffic shifting para canary deployments
+#
+# Por defecto: 100% tráfico a stable.
+# Para activar canary en gateway: ajustar los weights (ej. 90/10).
+#
+# Ejemplo de activación de canary en gateway:
+#   kubectl -n stage patch virtualservice circleguard-gateway-service \
+#     --type=json \
+#     -p='[{"op":"replace","path":"/spec/http/0/route/0/weight","value":90},
+#           {"op":"replace","path":"/spec/http/0/route/1/weight","value":10}]'
+##############################################################################
+
+# ── auth-service ──────────────────────────────────────────────────────────────
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: circleguard-auth-service
+  namespace: stage
+spec:
+  hosts:
+    - circleguard-auth-service
+  http:
+    - retries:
+        attempts: 3
+        perTryTimeout: 5s
+        retryOn: gateway-error,connect-failure,retriable-4xx
+      timeout: 15s
+      route:
+        - destination:
+            host: circleguard-auth-service
+            subset: stable
+          weight: 100
+        - destination:
+            host: circleguard-auth-service
+            subset: canary
+          weight: 0
+
+---
+# ── identity-service ──────────────────────────────────────────────────────────
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: circleguard-identity-service
+  namespace: stage
+spec:
+  hosts:
+    - circleguard-identity-service
+  http:
+    - retries:
+        attempts: 3
+        perTryTimeout: 5s
+        retryOn: gateway-error,connect-failure,retriable-4xx
+      timeout: 15s
+      route:
+        - destination:
+            host: circleguard-identity-service
+            subset: stable
+          weight: 100
+        - destination:
+            host: circleguard-identity-service
+            subset: canary
+          weight: 0
+
+---
+# ── promotion-service ─────────────────────────────────────────────────────────
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: circleguard-promotion-service
+  namespace: stage
+spec:
+  hosts:
+    - circleguard-promotion-service
+  http:
+    - retries:
+        attempts: 3
+        perTryTimeout: 5s
+        retryOn: gateway-error,connect-failure
+      timeout: 15s
+      route:
+        - destination:
+            host: circleguard-promotion-service
+            subset: stable
+          weight: 100
+        - destination:
+            host: circleguard-promotion-service
+            subset: canary
+          weight: 0
+
+---
+# ── gateway-service — canary deploy 90/10 ─────────────────────────────────────
+# Este servicio se usa como ejemplo de canary en la demo.
+# 90% va a stable (tag actual), 10% va a canary (nueva versión).
+# Para promover canary: cambiar weights a 100/0 para canary y hacer rollout.
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: circleguard-gateway-service
+  namespace: stage
+spec:
+  hosts:
+    - circleguard-gateway-service
+  http:
+    - retries:
+        attempts: 3
+        perTryTimeout: 5s
+        retryOn: gateway-error,connect-failure,retriable-4xx
+      timeout: 30s
+      route:
+        - destination:
+            host: circleguard-gateway-service
+            subset: stable
+          weight: 90
+        - destination:
+            host: circleguard-gateway-service
+            subset: canary
+          weight: 10
+
+---
+# ── dashboard-service ─────────────────────────────────────────────────────────
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: circleguard-dashboard-service
+  namespace: stage
+spec:
+  hosts:
+    - circleguard-dashboard-service
+  http:
+    - retries:
+        attempts: 3
+        perTryTimeout: 5s
+        retryOn: gateway-error,connect-failure
+      timeout: 15s
+      route:
+        - destination:
+            host: circleguard-dashboard-service
+            subset: stable
+          weight: 100
+        - destination:
+            host: circleguard-dashboard-service
+            subset: canary
+          weight: 0
+
+---
+# ── file-service ──────────────────────────────────────────────────────────────
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: circleguard-file-service
+  namespace: stage
+spec:
+  hosts:
+    - circleguard-file-service
+  http:
+    - retries:
+        attempts: 3
+        perTryTimeout: 5s
+        retryOn: gateway-error,connect-failure
+      timeout: 15s
+      route:
+        - destination:
+            host: circleguard-file-service
+            subset: stable
+          weight: 100
+        - destination:
+            host: circleguard-file-service
+            subset: canary
+          weight: 0
