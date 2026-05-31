@@ -14,7 +14,7 @@ metadata:
   labels:
     app: elasticsearch
 spec:
-  replicas: 0          # set to 1 to activate
+  replicas: 1
   selector:
     matchLabels:
       app: elasticsearch
@@ -85,7 +85,7 @@ metadata:
   labels:
     app: kibana
 spec:
-  replicas: 0          # set to 1 to activate
+  replicas: 1
   selector:
     matchLabels:
       app: kibana
@@ -161,6 +161,16 @@ data:
         Parser            docker
         Tag               kube.stage.<pod_name>
         Tag_Regex         /var/log/pods/stage_(?P<pod_name>[^/]+)/
+        Mem_Buf_Limit     5MB
+        Skip_Long_Lines   On
+
+    [INPUT]
+        Name              tail
+        Path              /var/log/pods/prod_circleguard*/**/*.log
+        Path_Key          filename
+        Parser            docker
+        Tag               kube.prod.<pod_name>
+        Tag_Regex         /var/log/pods/prod_(?P<pod_name>[^/]+)/
         Mem_Buf_Limit     5MB
         Skip_Long_Lines   On
 
