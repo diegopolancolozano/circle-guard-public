@@ -555,6 +555,26 @@ pipeline {
         }
 
         // ------------------------------------------------------------------ //
+        // Teardown stage BEFORE deploying prod: the cluster (3x 4 GB = 12 GB RAM)
+        // cannot run stage + prod simultaneously. Stage was used for E2E/chaos tests;
+        // it is no longer needed once prod is being promoted.
+        stage("Teardown Stage Before Prod") {
+            when {
+                allOf {
+                    branch "main"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
+            }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/k8s-teardown.sh stage"
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
         stage("Deploy Prod") {
             when {
                 allOf {
