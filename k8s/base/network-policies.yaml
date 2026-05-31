@@ -71,23 +71,6 @@ spec:
           port: 53
 
 ---
-# Egress: allow all outbound from smoke/perf/test pods (locust, zap, curl)
-# These pods are created at runtime by CI scripts and need HTTP access to app services.
-# Without this, allow-dns-egress (podSelector:{}) restricts their egress to DNS only.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-ci-test-egress
-spec:
-  podSelector:
-    matchLabels:
-      ci-test: "true"
-  policyTypes:
-    - Egress
-  egress:
-    - {}  # permit all outbound from CI test pods
-
----
 # Egress: allow all outbound from circleguard services (DB, Kafka, LDAP, identity-service, etc.)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
