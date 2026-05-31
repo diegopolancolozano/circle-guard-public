@@ -57,17 +57,41 @@ kubectl -n monitoring port-forward svc/jaeger 16686:16686
 # http://localhost:16686
 ```
 
+### ELK Stack — gestión de logs (`k8s/monitoring/elk.yaml`)
+
+| Componente | Imagen | Puerto |
+|:---|:---|:---|
+| **Elasticsearch** | `docker.elastic.co/elasticsearch/elasticsearch:8.13.2` | 9200 |
+| **Kibana** | `docker.elastic.co/kibana/kibana:8.13.2` | 5601 |
+| **Fluent Bit** | `fluent/fluent-bit:3.0.4` | DaemonSet |
+
+- Fluent Bit corre como DaemonSet y recolecta logs de pods en namespaces `dev`, `stage` y `prod`
+- Los logs se indexan en Elasticsearch bajo el índice `circleguard-logs`
+- Kibana permite buscar y visualizar los logs
+
+Acceso local:
+```bash
+kubectl -n monitoring port-forward svc/kibana 5601:5601
+# http://localhost:5601
+```
+
 ### Diagrama lógico
 
 ```mermaid
 flowchart LR
   services[Microservicios\nSpring Boot] -- /actuator/prometheus --> prom[Prometheus\n:9090]
   services -- OTLP spans --> jaeger[Jaeger\n:16686]
+  nodes[K8s Nodes\n/var/log/pods] -- DaemonSet --> fb[Fluent Bit]
+  fb -- circleguard-logs --> es[Elasticsearch\n:9200]
+  es --> kibana[Kibana\n:5601]
   prom --> grafana[Grafana\n:3000]
   subgraph monitoring namespace
     prom
     grafana
     jaeger
+    fb
+    es
+    kibana
   end
 ```
 
@@ -91,8 +115,29 @@ Los pods de Prometheus tienen un **ClusterRole** separado (sólo lectura de recu
 | RBAC monitoring | ClusterRole de sólo-lectura para Prometheus |
 | Escaneo de imágenes | Trivy (`scripts/ci/run-trivy.sh`) — HIGH/CRITICAL en cada build |
 | Escaneo web | OWASP ZAP baseline (`scripts/ci/run-owasp-zap.sh`) — contra gateway en stage |
-| TLS | Configurable via Ingress/Istio; en demo local se usa port-forward |
+| TLS | ingress-nginx + cert-manager + Let's Encrypt (`k8s/tls/`, `scripts/ci/setup-tls.sh`) |
 | Health checks | `startupProbe`, `readinessProbe`, `livenessProbe` en todos los deployments |
+
+### TLS — Ingress con cert-manager
+
+El gateway público se expone via HTTPS usando **ingress-nginx** + **cert-manager** + **Let's Encrypt**.
+
+```bash
+# Setup completo (una sola vez por cluster):
+bash scripts/ci/setup-tls.sh                  # nip.io automático (sin dominio)
+bash scripts/ci/setup-tls.sh mi-dominio.com   # dominio propio
+```
+
+Archivos relevantes:
+- `k8s/tls/cluster-issuer.yaml` — ClusterIssuers: `letsencrypt-staging` y `letsencrypt-prod`
+- `k8s/tls/ingress.yaml` — Ingress para `circleguard-gateway-service` en `stage` y `prod`
+- `scripts/ci/setup-tls.sh` — script completo de instalación
+
+Verificar estado del certificado:
+```bash
+kubectl -n stage get certificate
+kubectl -n stage describe certificaterequest
+```
 
 ### Buenas prácticas de secretos
 
