@@ -86,15 +86,19 @@ wait_parallel() {
   return $failed
 }
 
-# ── 1. Infrastructure (postgres, redis, zookeeper, kafka) in parallel ─────────
-# Kafka is the slowest (JVM + ZooKeeper dependency). Running all in parallel
-# means the total infra wait equals only the slowest component, not the sum.
-echo "=== Waiting for infrastructure components (parallel) ==="
-wait_parallel "$INFRA_TIMEOUT" \
-  postgres \
-  redis \
-  zookeeper \
-  kafka
+# ── 1. Infrastructure — ordered to respect dependencies ───────────────────────
+# postgres and redis are independent: wait in parallel.
+echo "=== Waiting for postgres + redis (parallel) ==="
+wait_parallel "$INFRA_TIMEOUT" postgres redis
+
+# zookeeper must be ready before kafka can connect. Wait sequentially.
+echo "=== Waiting for zookeeper ==="
+wait_for_rollout zookeeper "$INFRA_TIMEOUT"
+
+# kafka connects to zookeeper on start; waiting after zookeeper is ready
+# avoids crash-loop back-off from early connection failures.
+echo "=== Waiting for kafka ==="
+wait_for_rollout kafka "$INFRA_TIMEOUT"
 
 # ── 2. Application services — all in parallel once infra is ready ─────────────
 # Each Spring service starts independently; the longest one bounds the wait.
