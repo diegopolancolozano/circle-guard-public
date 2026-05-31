@@ -1,8 +1,10 @@
 ##############################################################################
 # ELK Stack — Elasticsearch + Kibana + Fluent Bit log shipper
-# NOTE: Disabled by default (replicas: 0) due to high memory requirements.
-# Scale up manually: kubectl -n monitoring scale deployment/elasticsearch --replicas=1
-# Recommended for production clusters with >= 4 GB free RAM.
+# NOTE: Disabled by default (replicas: 0) — Elasticsearch alone consumes
+#       ~1 GB RAM which triggers node OOM on 3x4GB DOKS nodes when prod
+#       is also running. Scale up manually ONLY after prod is stable:
+#   kubectl -n monitoring scale deployment/elasticsearch --replicas=1
+#   kubectl -n monitoring scale deployment/kibana --replicas=1
 ##############################################################################
 
 # ── Elasticsearch ─────────────────────────────────────────────────────────
@@ -14,7 +16,7 @@ metadata:
   labels:
     app: elasticsearch
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: elasticsearch
@@ -85,7 +87,7 @@ metadata:
   labels:
     app: kibana
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: kibana
