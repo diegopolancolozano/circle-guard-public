@@ -557,6 +557,29 @@ pipeline {
         }
 
         // ------------------------------------------------------------------ //
+        // Capture cluster + pod state as evidence artifact — main branch (prod deploy).
+        stage("Prod Evidence") {
+            when {
+                allOf {
+                    branch "main"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
+            }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/k8s-stage-evidence.sh prod prod-evidence.txt"
+                    }
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: "prod-evidence.txt", allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
         stage("Generate Release Notes") {
             when {
                 allOf {

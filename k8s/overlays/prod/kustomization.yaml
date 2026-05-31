@@ -1,6 +1,8 @@
 namespace: prod
 resources:
   - ../../base
+patchesStrategicMerge:
+  - imagepullpolicy-patch.yaml
 
 images:
   - name: diegoapolancol/circleguard-auth-service
