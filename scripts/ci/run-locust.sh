@@ -77,6 +77,8 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: ${id}
+  labels:
+    ci-test: "true"
 spec:
   restartPolicy: Never
   containers:
