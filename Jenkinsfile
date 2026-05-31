@@ -569,6 +569,15 @@ pipeline {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                         sh "scripts/ci/k8s-teardown.sh stage"
+                        // Wait for stage pods to fully terminate and release RAM
+                        // before scheduling prod. Pods have terminationGracePeriodSeconds=30
+                        // so 90s gives them time to disappear from the node.
+                        sh """
+                            echo 'Waiting for stage pods to terminate (max 90s)...'
+                            kubectl -n stage wait --for=delete pod --all --timeout=90s 2>/dev/null || true
+                            echo 'Sleeping 30s extra to let kubelet reclaim memory...'
+                            sleep 30
+                        """
                     }
                 }
             }
@@ -583,7 +592,10 @@ pipeline {
                 }
             }
             steps {
-                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                // Prod cold boot (fresh PVCs, Kafka init) needs more time than stage.
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}",
+                         "INFRA_TIMEOUT=660s",
+                         "SERVICE_TIMEOUT=600s"]) {
                     sh "scripts/ci/k8s-deploy.sh prod"
                 }
             }
