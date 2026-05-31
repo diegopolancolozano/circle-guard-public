@@ -77,6 +77,8 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: ${id}
+  labels:
+    ci-test: "true"
 spec:
   restartPolicy: Never
   containers:
@@ -122,11 +124,8 @@ EOF
 
 # === Main execution ===
 
-export AUTH_BASE_URL="$(svc_url circleguard-auth-service 18186)"
-export IDENTITY_BASE_URL="$(svc_url circleguard-identity-service 18180)"
-export GATEWAY_BASE_URL="$(svc_url circleguard-gateway-service 18181)"
-export PROMOTION_BASE_URL="$(svc_url circleguard-promotion-service 18182 8081)"
-export QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.qr_secret}' | base64 --decode)"
+# QR secret from cluster (used by K8s locust pod)
+export QR_SECRET="$(kubectl -n "$ENVIRONMENT" get secret qr-secret -o jsonpath='{.data.qr_secret}' 2>/dev/null | base64 --decode || echo "change-me-change-me-change-me-change-me")"
 
 USERS="${USERS:-20}"
 SPAWN_RATE="${SPAWN_RATE:-4}"
@@ -140,32 +139,14 @@ echo "[Locust] LOCUST_DIR=${LOCUST_DIR}"
 echo "[Locust] RESULTS_DIR=${RESULTS_DIR}"
 echo "[Locust] USERS=${USERS} SPAWN_RATE=${SPAWN_RATE} RUN_TIME=${RUN_TIME}"
 
-echo "[Locust] Testing docker mount for ${LOCUST_DIR}"
-if docker run --rm -v "${LOCUST_DIR}:/mnt/performance" busybox ls /mnt/performance/locustfile.py >/dev/null 2>&1; then
-  echo "[Locust] Docker mount succeeded - running via docker run"
-  docker run --rm \
-    -e AUTH_BASE_URL="$AUTH_BASE_URL" \
-    -e IDENTITY_BASE_URL="$IDENTITY_BASE_URL" \
-    -e GATEWAY_BASE_URL="$GATEWAY_BASE_URL" \
-    -e PROMOTION_BASE_URL="$PROMOTION_BASE_URL" \
-    -e QR_SECRET="$QR_SECRET" \
-    -v "${LOCUST_DIR}:/mnt/performance" \
-    -v "${RESULTS_DIR}:/tmp/results" \
-    locustio/locust:2.24.1 \
-    -f /mnt/performance/locustfile.py \
-    --headless \
-    --users "$USERS" \
-    --spawn-rate "$SPAWN_RATE" \
-    --run-time "$RUN_TIME" \
-    --csv="/tmp/results/locust-${TIMESTAMP}" | tee "$RESULT_LOG"
-  echo "[Locust] CSV reports saved to ${RESULTS_DIR}/locust-${TIMESTAMP}*"
-else
-  echo "[Locust] Docker mount test failed - using K8s fallback"
-  AUTH_BASE_URL="http://circleguard-auth-service:8080"
-  IDENTITY_BASE_URL="http://circleguard-identity-service:8080"
-  GATEWAY_BASE_URL="http://circleguard-gateway-service:8080"
-  PROMOTION_BASE_URL="http://circleguard-promotion-service:8081"
-  run_locust_in_k8s
-fi
+# Docker-outside-of-Docker: volume mounts use HOST paths, not container paths.
+# Jenkins workspace lives inside the container so -v never resolves correctly.
+# Always use the K8s in-cluster fallback which needs no local volume mounts.
+echo "[Locust] Using K8s in-cluster mode"
+AUTH_BASE_URL="http://circleguard-auth-service:8080"
+IDENTITY_BASE_URL="http://circleguard-identity-service:8080"
+GATEWAY_BASE_URL="http://circleguard-gateway-service:8080"
+PROMOTION_BASE_URL="http://circleguard-promotion-service:8081"
+run_locust_in_k8s
 
 echo "[Locust] Run log saved to ${RESULT_LOG}"

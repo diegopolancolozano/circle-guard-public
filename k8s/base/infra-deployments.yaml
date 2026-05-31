@@ -215,6 +215,12 @@ spec:
               value: "1"
             - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
               value: "true"
+            # Limit JVM heap — without this cp-kafka uses JVM ergonomics
+            # (~25% of cgroup limit) which still causes OOM due to off-heap overhead.
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx384m -Xms192m"
+            - name: KAFKA_JVM_PERFORMANCE_OPTS
+              value: "-XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:+ExplicitGCInvokesConcurrent"
           ports:
             - containerPort: 9092
           resources:
@@ -222,7 +228,7 @@ spec:
               memory: "512Mi"
               cpu: "250m"
             limits:
-              memory: "1Gi"
+              memory: "768Mi"
               cpu: "500m"
 
 ---

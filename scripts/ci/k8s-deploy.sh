@@ -57,4 +57,18 @@ done
 
 kubectl apply -k "k8s/overlays/${ENVIRONMENT}" --validate=false
 
+# Force-restart app services so pods pick up any Secret/ConfigMap changes.
+# kubectl apply only updates the Secret object; running pods keep the old env
+# vars until they restart. imagePullPolicy:Always also only pulls on pod start.
+echo "=== Restarting app services to pick up config changes ==="
+for svc in \
+  circleguard-auth-service \
+  circleguard-identity-service \
+  circleguard-promotion-service \
+  circleguard-gateway-service \
+  circleguard-dashboard-service \
+  circleguard-file-service; do
+  kubectl -n "$ENVIRONMENT" rollout restart "deployment/${svc}" 2>/dev/null || true
+done
+
 scripts/ci/k8s-wait-ready.sh "$ENVIRONMENT"

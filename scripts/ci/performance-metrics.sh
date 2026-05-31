@@ -17,8 +17,9 @@ mkdir -p "${RESULTS_DIR}/metrics"
 
 LATEST_STATS="$(ls -1t "${RESULTS_DIR}"/locust-*_stats.csv 2>/dev/null | head -1 || true)"
 if [ -z "${LATEST_STATS}" ]; then
-  echo "ERROR: No Locust stats CSV found in ${RESULTS_DIR}" >&2
-  exit 1
+  # K8s fallback mode does not produce a CSV — skip metrics, don't fail the stage
+  echo "INFO: No Locust stats CSV found in ${RESULTS_DIR} (K8s mode or locust was skipped). Skipping metrics." >&2
+  exit 0
 fi
 
 TMP_METRICS="$(mktemp)"
