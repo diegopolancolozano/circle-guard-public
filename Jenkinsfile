@@ -26,13 +26,13 @@ pipeline {
     parameters {
         choice(
             name: 'PIPELINE_MODE',
-            choices: ['full', 'reduced'],
-            description: 'full = deploy + smoke/perf/release flow; reduced = build + tests only'
+            choices: ['reduced', 'full'],
+            description: 'reduced = build + tests only; full = deploy + smoke/perf/release flow'
         )
         choice(
             name: 'CLOUD_TARGET',
-            choices: ['digitalocean', 'gcp', 'local', 'multi'],
-            description: 'Target cloud. digitalocean = DOKS; gcp = GKE; multi = DO + GCP sequentially.'
+            choices: ['gcp', 'digitalocean', 'local', 'multi'],
+            description: 'Target cloud for full mode. multi = run DO + GCP sequentially (two builds).'
         )
         string(
             name: 'GCP_PROJECT',
@@ -90,16 +90,8 @@ pipeline {
         stage("Resolve Environment") {
             steps {
                 script {
-                    env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'full').trim()
-                    env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'digitalocean').trim()
-
-                    // Builds automáticos (webhook) en ramas de despliegue → siempre full + DO
-                    def isWebhook = !currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
-                    if (isWebhook && env.BRANCH_NAME in ['dev', 'stage', 'main']) {
-                        env.PIPELINE_MODE = 'full'
-                        if (env.CLOUD_TARGET == 'gcp') { env.CLOUD_TARGET = 'digitalocean' }
-                        echo "Build automático en ${env.BRANCH_NAME} → PIPELINE_MODE=full, CLOUD_TARGET=${env.CLOUD_TARGET}"
-                    }
+                    env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'reduced').trim()
+                    env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'gcp').trim()
 
                     switch (env.BRANCH_NAME) {
                         case "dev":
@@ -281,9 +273,9 @@ pipeline {
                             """
                         }
                     }
-                    // Sanity check (--short removed in kubectl 1.28+)
+                    // Sanity check
                     withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
-                        sh "kubectl version --client"
+                        sh "kubectl version --client --short || kubectl version --client"
                         sh "kubectl config current-context"
                     }
                 }
@@ -325,12 +317,7 @@ pipeline {
             }
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    script {
-                        // Only scan the first (environment) tag — version tags may not be
-                        // pushed when Build & Push Images skips due to no service changes.
-                        def trivyTag = env.IMAGE_TAGS.split(',')[0]
-                        sh "scripts/ci/run-trivy.sh '${trivyTag}' '${env.DOCKER_IMAGE_PREFIX}'"
-                    }
+                    sh "scripts/ci/run-trivy.sh '${env.IMAGE_TAGS}' '${env.DOCKER_IMAGE_PREFIX}'"
                 }
             }
             post {
@@ -490,7 +477,7 @@ pipeline {
             }
             post {
                 always {
-                    archiveArtifacts artifacts: "tests/security/results/zap-*.html, tests/security/results/zap-*.json, tests/security/results/zap-*.md, tests/security/results/zap-*.txt", allowEmptyArchive: true
+                    archiveArtifacts artifacts: "tests/security/results/zap-*.html, tests/security/results/zap-*.json, tests/security/results/zap-*.md", allowEmptyArchive: true
                 }
             }
         }
