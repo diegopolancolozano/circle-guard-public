@@ -25,8 +25,10 @@ TRIVY_EXIT_CODE="${TRIVY_EXIT_CODE:-0}"
 scan_image() {
   local image_ref="$1"
   local safe_name="$2"
+  local json_out="/output/trivy-${safe_name}.json"
+  local txt_out="/output/trivy-${safe_name}.txt"
 
-  # trivy-cache persists the vuln DB across builds — avoids re-downloading on every run
+  # ── Single scan → JSON (trivy-cache named volume avoids re-downloading the DB) ──
   docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v trivy-cache:/root/.cache/trivy \
@@ -34,18 +36,18 @@ scan_image() {
     "${TRIVY_IMAGE}" \
     image --severity "${TRIVY_SEVERITY}" --ignore-unfixed \
     --exit-code "${TRIVY_EXIT_CODE}" \
-    --format json --output "/output/trivy-${safe_name}.json" \
+    --format json --output "${json_out}" \
     "${image_ref}"
 
+  # ── Convert JSON → table (no re-scan, no DB download: trivy convert reads the file) ──
+  # trivy convert was introduced in v0.48; current image is v0.52.2.
   docker run --rm \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v trivy-cache:/root/.cache/trivy \
     -v "${RESULTS_DIR}:/output" \
     "${TRIVY_IMAGE}" \
-    image --severity "${TRIVY_SEVERITY}" --ignore-unfixed \
-    --exit-code 0 \
-    --format table --output "/output/trivy-${safe_name}.txt" \
-    "${image_ref}"
+    convert \
+    --format table \
+    --output "${txt_out}" \
+    "${json_out}"
 }
 
 for service_dir in "${SERVICES[@]}"; do

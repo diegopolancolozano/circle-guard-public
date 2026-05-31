@@ -226,7 +226,7 @@ pipeline {
         // The compiled classes are reused by 'Build & Push Images' (no second clean).
         stage("Build & Test") {
             steps {
-                sh "./gradlew test jacocoTestReport --info --no-daemon"
+                sh "./gradlew test jacocoTestReport --no-daemon"
             }
             post {
                 always {
