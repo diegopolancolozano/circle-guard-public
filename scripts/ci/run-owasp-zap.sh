@@ -36,6 +36,7 @@ echo "[zap] Running baseline scan in-cluster against ${TARGET_URL}" >&2
 kubectl -n "${ENVIRONMENT}" run "${ZAP_POD}" \
   --image=ghcr.io/zaproxy/zaproxy:stable \
   --restart=Never \
+  --labels="ci-test=true" \
   --command -- zap-baseline.py \
     -t "${TARGET_URL}" \
     -I

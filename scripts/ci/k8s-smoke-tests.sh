@@ -107,7 +107,12 @@ assert_http_200_with_retry() {
 kubectl -n "$ENVIRONMENT" delete pod "$POD_NAME" --ignore-not-found
 # sleep 1800 (30 min): deploy + 6x wait_deployment_available + 6x health retries
 # can take up to 15+ min. 300s was too short and caused Completed pod before exec.
-kubectl -n "$ENVIRONMENT" run "$POD_NAME" --image="$IMAGE" --restart=Never --command -- sleep 1800
+# ci-test=true label: required for allow-ci-test-egress NetworkPolicy so the pod
+# can reach app services on port 8080/8081 (allow-dns-egress restricts all pods to
+# DNS-only egress; without this label the curl would hang until TCP timeout ~2min).
+kubectl -n "$ENVIRONMENT" run "$POD_NAME" --image="$IMAGE" --restart=Never \
+  --labels="ci-test=true" \
+  --command -- sleep 1800
 kubectl -n "$ENVIRONMENT" wait --for=condition=Ready "pod/${POD_NAME}" --timeout=120s
 
 wait_deployment_available "circleguard-identity-service"
