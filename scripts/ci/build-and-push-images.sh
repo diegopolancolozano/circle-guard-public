@@ -28,8 +28,6 @@ SERVICES=(
   "circleguard-identity-service"
   "circleguard-promotion-service"
   "circleguard-gateway-service"
-  "circleguard-notification-service"
-  "circleguard-form-service"
   "circleguard-dashboard-service"
   "circleguard-file-service"
 )
@@ -44,11 +42,9 @@ echo "=== Building bootJars (reusing test-stage compilation) ==="
   :services:circleguard-identity-service:bootJar \
   :services:circleguard-promotion-service:bootJar \
   :services:circleguard-gateway-service:bootJar \
-  :services:circleguard-notification-service:bootJar \
-  :services:circleguard-form-service:bootJar \
   :services:circleguard-dashboard-service:bootJar \
   :services:circleguard-file-service:bootJar \
-  -x test --no-daemon
+  -x test --no-daemon --parallel
 
 echo "=== Building and pushing Docker images ==="
 for service_dir in "${SERVICES[@]}"; do
