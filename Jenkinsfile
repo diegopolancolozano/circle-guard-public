@@ -394,6 +394,7 @@ pipeline {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/k8s-install-metrics-server.sh"
                         sh "scripts/ci/k8s-deploy-monitoring.sh"
                     }
                 }
