@@ -31,6 +31,16 @@ kubectl apply -f k8s/namespaces.yaml --validate=false
 echo "=== Scaling down heavy infra (neo4j, openldap) to free RAM ==="
 kubectl -n "$ENVIRONMENT" scale deployment neo4j openldap --replicas=0 --ignore-not-found 2>/dev/null || true
 
+# Delete any Pending infra pods — stale pods from previous runs with old resource
+# requests block scheduling even after kubectl apply updates the Deployment spec.
+echo "=== Deleting Pending infra pods so new resource limits apply cleanly ==="
+for infra_dep in kafka zookeeper postgres redis; do
+  kubectl -n "$ENVIRONMENT" delete pods \
+    -l "app=${infra_dep}" \
+    --field-selector=status.phase==Pending \
+    --ignore-not-found 2>/dev/null || true
+done
+
 # Force redeploy if requested
 if [ "$FORCE_REDEPLOY" = "true" ]; then
   echo "=== FORCE_REDEPLOY=true, cleaning up existing deployments ==="
@@ -56,6 +66,23 @@ for pod in $(kubectl -n "$ENVIRONMENT" get pods --no-headers 2>/dev/null | awk '
 done
 
 kubectl apply -k "k8s/overlays/${ENVIRONMENT}" --validate=false
+
+# Restart infra deployments ONLY if their pod is stuck in Pending.
+# Running infra pods are NOT restarted — RollingUpdate would try to schedule
+# a second pod before terminating the first, which fails on memory-constrained clusters.
+echo "=== Restarting infra deployments stuck in Pending ==="
+for infra_dep in kafka zookeeper postgres redis; do
+  pending=$(kubectl -n "$ENVIRONMENT" get pods -l "app=${infra_dep}" \
+    --field-selector=status.phase==Pending --no-headers 2>/dev/null | wc -l || echo 0)
+  running=$(kubectl -n "$ENVIRONMENT" get pods -l "app=${infra_dep}" \
+    --field-selector=status.phase==Running --no-headers 2>/dev/null | wc -l || echo 0)
+  if [ "$pending" -gt 0 ] && [ "$running" -eq 0 ]; then
+    echo "  ${infra_dep}: stuck in Pending, forcing restart"
+    kubectl -n "$ENVIRONMENT" rollout restart "deployment/${infra_dep}" 2>/dev/null || true
+  else
+    echo "  ${infra_dep}: skipping restart (running=${running}, pending=${pending})"
+  fi
+done
 
 # Force-restart app services so pods pick up any Secret/ConfigMap changes.
 # kubectl apply only updates the Secret object; running pods keep the old env
