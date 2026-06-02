@@ -6,3 +6,20 @@ metadata:
   name: openldap
 spec:
   replicas: 0
+
+---
+# Kafka + Zookeeper: not directly tested — disabled to free memory on DO cluster
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+spec:
+  replicas: 0
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+spec:
+  replicas: 0
