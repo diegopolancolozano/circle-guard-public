@@ -31,6 +31,16 @@ kubectl apply -f k8s/namespaces.yaml --validate=false
 echo "=== Scaling down heavy infra (neo4j, openldap) to free RAM ==="
 kubectl -n "$ENVIRONMENT" scale deployment neo4j openldap --replicas=0 --ignore-not-found 2>/dev/null || true
 
+# Delete any Pending infra pods — stale pods from previous runs with old resource
+# requests block scheduling even after kubectl apply updates the Deployment spec.
+echo "=== Deleting Pending infra pods so new resource limits apply cleanly ==="
+for infra_dep in kafka zookeeper postgres redis; do
+  kubectl -n "$ENVIRONMENT" delete pods \
+    -l "app=${infra_dep}" \
+    --field-selector=status.phase==Pending \
+    --ignore-not-found 2>/dev/null || true
+done
+
 # Force redeploy if requested
 if [ "$FORCE_REDEPLOY" = "true" ]; then
   echo "=== FORCE_REDEPLOY=true, cleaning up existing deployments ==="
@@ -56,6 +66,13 @@ for pod in $(kubectl -n "$ENVIRONMENT" get pods --no-headers 2>/dev/null | awk '
 done
 
 kubectl apply -k "k8s/overlays/${ENVIRONMENT}" --validate=false
+
+# Restart infra deployments so pods pick up updated resource requests from the overlay.
+# Without this, old ReplicaSets keep their original resource spec.
+echo "=== Restarting infra deployments to apply new resource limits ==="
+for infra_dep in kafka zookeeper postgres redis; do
+  kubectl -n "$ENVIRONMENT" rollout restart "deployment/${infra_dep}" 2>/dev/null || true
+done
 
 # Force-restart app services so pods pick up any Secret/ConfigMap changes.
 # kubectl apply only updates the Secret object; running pods keep the old env
