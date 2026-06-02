@@ -303,7 +303,13 @@ pipeline {
                         usernameVariable: 'DOCKERHUB_USERNAME',
                         passwordVariable: 'DOCKERHUB_PASSWORD'
                     )]) {
-                        sh "scripts/ci/build-and-push-images.sh '${env.IMAGE_TAGS}' '${env.DOCKER_IMAGE_PREFIX}' '${DOCKERHUB_USERNAME}' '${DOCKERHUB_PASSWORD}'"
+                        sh '''
+                            scripts/ci/build-and-push-images.sh \
+                                "''' + env.IMAGE_TAGS + '''" \
+                                "''' + env.DOCKER_IMAGE_PREFIX + '''" \
+                                "$DOCKERHUB_USERNAME" \
+                                "$DOCKERHUB_PASSWORD"
+                        '''
                     }
                 }
             }
