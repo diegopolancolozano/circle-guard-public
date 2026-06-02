@@ -6,6 +6,8 @@ kind: Deployment
 metadata:
   name: kafka
 spec:
+  strategy:
+    type: Recreate
   template:
     spec:
       containers:
@@ -29,6 +31,8 @@ kind: Deployment
 metadata:
   name: zookeeper
 spec:
+  strategy:
+    type: Recreate
   template:
     spec:
       containers:
@@ -50,6 +54,8 @@ kind: Deployment
 metadata:
   name: postgres
 spec:
+  strategy:
+    type: Recreate
   template:
     spec:
       containers:
@@ -68,6 +74,8 @@ kind: Deployment
 metadata:
   name: redis
 spec:
+  strategy:
+    type: Recreate
   template:
     spec:
       containers:
