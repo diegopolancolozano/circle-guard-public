@@ -12,22 +12,35 @@ RUN jenkins-plugin-cli -f /usr/share/jenkins/plugins.txt
 # Copy init groovy scripts
 COPY jenkins-init/*.groovy /usr/share/jenkins/ref/init.groovy.d/
 
-# Install additional tools needed for CI/CD
+# Install base dependencies
 RUN apt-get update && apt-get install -y \
     git \
     curl \
-    apt-transport-https \
-    ca-certificates \
+    wget \
     gnupg \
     lsb-release \
+    ca-certificates \
+    apt-transport-https \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI from official Docker repository
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
+    | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
+https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
     > /etc/apt/sources.list.d/docker.list \
     && apt-get update \
     && apt-get install -y docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Trivy from official Aqua Security repository
+RUN wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
+    | gpg --dearmor -o /usr/share/keyrings/trivy.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] \
+https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" \
+    > /etc/apt/sources.list.d/trivy.list \
+    && apt-get update \
+    && apt-get install -y trivy \
     && rm -rf /var/lib/apt/lists/*
 
 # Install kubectl from official Kubernetes release
@@ -35,13 +48,6 @@ RUN KUBECTL_VERSION=$(curl -L -s https://dl.k8s.io/release/stable.txt) \
     && curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
     && chmod +x kubectl \
     && mv kubectl /usr/local/bin/kubectl
-
-# Install Trivy for container image scanning
-RUN TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/') \
-    && curl -LO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
-    && tar -xzf "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" trivy \
-    && mv trivy /usr/local/bin/trivy \
-    && rm -f "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
 
 # Switch back to jenkins user
 USER jenkins
