@@ -93,20 +93,12 @@ pipeline {
                     env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'full').trim()
                     env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'digitalocean').trim()
 
-<<<<<<< HEAD
-                    // Builds automáticos (webhook) en ramas de despliegue → siempre full + DO
-=======
                     // Webhook builds on deploy branches → always full + DO
->>>>>>> 592fff0fd61db2e7d7a088e30a55876516a9f768
                     def isWebhook = !currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
                     if (isWebhook && env.BRANCH_NAME in ['dev', 'stage', 'main']) {
                         env.PIPELINE_MODE = 'full'
                         if (env.CLOUD_TARGET == 'gcp') { env.CLOUD_TARGET = 'digitalocean' }
-<<<<<<< HEAD
-                        echo "Build automático en ${env.BRANCH_NAME} → PIPELINE_MODE=full, CLOUD_TARGET=${env.CLOUD_TARGET}"
-=======
                         echo "Webhook build on ${env.BRANCH_NAME} → PIPELINE_MODE=full, CLOUD_TARGET=${env.CLOUD_TARGET}"
->>>>>>> 592fff0fd61db2e7d7a088e30a55876516a9f768
                     }
 
                     switch (env.BRANCH_NAME) {
@@ -331,13 +323,8 @@ pipeline {
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                     script {
-<<<<<<< HEAD
-                        // Only scan the first (environment) tag — version tags may not be
-                        // pushed when Build & Push Images skips due to no service changes.
-=======
                         // Scan only the first (environment) tag — version tags may not exist
                         // when Build & Push Images is skipped due to no service changes.
->>>>>>> 592fff0fd61db2e7d7a088e30a55876516a9f768
                         def trivyTag = env.IMAGE_TAGS.split(',')[0]
                         sh "scripts/ci/run-trivy.sh '${trivyTag}' '${env.DOCKER_IMAGE_PREFIX}'"
                     }
