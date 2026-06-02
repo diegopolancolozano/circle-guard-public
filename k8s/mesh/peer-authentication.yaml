@@ -1,0 +1,36 @@
+##############################################################################
+# PeerAuthentication — mTLS STRICT entre todos los pods del mesh
+# Aplica a dev, stage y prod una vez que Istio está instalado.
+##############################################################################
+
+# ── dev ───────────────────────────────────────────────────────────────────────
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: dev
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# ── stage ─────────────────────────────────────────────────────────────────────
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: stage
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# ── prod ──────────────────────────────────────────────────────────────────────
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: prod
+spec:
+  mtls:
+    mode: STRICT

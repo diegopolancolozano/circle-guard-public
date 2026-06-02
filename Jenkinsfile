@@ -52,7 +52,7 @@ pipeline {
         string(
             name: 'TEARDOWN_AFTER_MINUTES',
             defaultValue: '5',
-            description: 'Minutes to wait before scaling dev/stage to zero. Use 0 to keep running.'
+            description: 'Minutes to wait before scaling the environment to zero. Use 0 to keep running.'
         )
     }
 
@@ -93,12 +93,20 @@ pipeline {
                     env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'full').trim()
                     env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'digitalocean').trim()
 
+<<<<<<< HEAD
                     // Builds automáticos (webhook) en ramas de despliegue → siempre full + DO
+=======
+                    // Webhook builds on deploy branches → always full + DO
+>>>>>>> 592fff0fd61db2e7d7a088e30a55876516a9f768
                     def isWebhook = !currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
                     if (isWebhook && env.BRANCH_NAME in ['dev', 'stage', 'main']) {
                         env.PIPELINE_MODE = 'full'
                         if (env.CLOUD_TARGET == 'gcp') { env.CLOUD_TARGET = 'digitalocean' }
+<<<<<<< HEAD
                         echo "Build automático en ${env.BRANCH_NAME} → PIPELINE_MODE=full, CLOUD_TARGET=${env.CLOUD_TARGET}"
+=======
+                        echo "Webhook build on ${env.BRANCH_NAME} → PIPELINE_MODE=full, CLOUD_TARGET=${env.CLOUD_TARGET}"
+>>>>>>> 592fff0fd61db2e7d7a088e30a55876516a9f768
                     }
 
                     switch (env.BRANCH_NAME) {
@@ -226,7 +234,7 @@ pipeline {
         // The compiled classes are reused by 'Build & Push Images' (no second clean).
         stage("Build & Test") {
             steps {
-                sh "./gradlew test jacocoTestReport --info --no-daemon"
+                sh "./gradlew test jacocoTestReport --no-daemon"
             }
             post {
                 always {
@@ -298,21 +306,18 @@ pipeline {
             }
             steps {
                 script {
-                    def changed = sh(
-                        script: "git diff --name-only HEAD~1..HEAD 2>/dev/null || true",
-                        returnStdout: true
-                    ).trim()
-                    boolean needBuild = !changed || (changed =~ /(services\/|Dockerfile|build\.gradle|settings\.gradle|gradlew|mobile\/|gradle\/)/)
-                    if (needBuild) {
-                        withCredentials([usernamePassword(
-                            credentialsId: env.DOCKER_CREDENTIALS_ID,
-                            usernameVariable: 'DOCKERHUB_USERNAME',
-                            passwordVariable: 'DOCKERHUB_PASSWORD'
-                        )]) {
-                            sh "scripts/ci/build-and-push-images.sh '${env.IMAGE_TAGS}' '${env.DOCKER_IMAGE_PREFIX}' '${DOCKERHUB_USERNAME}' '${DOCKERHUB_PASSWORD}'"
-                        }
-                    } else {
-                        echo "No service/Dockerfile changes detected — skipping image build.\nChanged: ${changed}"
+                    withCredentials([usernamePassword(
+                        credentialsId: env.DOCKER_CREDENTIALS_ID,
+                        usernameVariable: 'DOCKERHUB_USERNAME',
+                        passwordVariable: 'DOCKERHUB_PASSWORD'
+                    )]) {
+                        sh '''
+                            scripts/ci/build-and-push-images.sh \
+                                "''' + env.IMAGE_TAGS + '''" \
+                                "''' + env.DOCKER_IMAGE_PREFIX + '''" \
+                                "$DOCKERHUB_USERNAME" \
+                                "$DOCKERHUB_PASSWORD"
+                        '''
                     }
                 }
             }
@@ -326,8 +331,13 @@ pipeline {
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                     script {
+<<<<<<< HEAD
                         // Only scan the first (environment) tag — version tags may not be
                         // pushed when Build & Push Images skips due to no service changes.
+=======
+                        // Scan only the first (environment) tag — version tags may not exist
+                        // when Build & Push Images is skipped due to no service changes.
+>>>>>>> 592fff0fd61db2e7d7a088e30a55876516a9f768
                         def trivyTag = env.IMAGE_TAGS.split(',')[0]
                         sh "scripts/ci/run-trivy.sh '${trivyTag}' '${env.DOCKER_IMAGE_PREFIX}'"
                     }
@@ -394,6 +404,7 @@ pipeline {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/k8s-install-metrics-server.sh"
                         sh "scripts/ci/k8s-deploy-monitoring.sh"
                     }
                 }
@@ -555,7 +566,10 @@ pipeline {
         }
 
         // ------------------------------------------------------------------ //
-        stage("Deploy Prod") {
+        // Teardown stage BEFORE deploying prod: the cluster (3x 4 GB = 12 GB RAM)
+        // cannot run stage + prod simultaneously. Stage was used for E2E/chaos tests;
+        // it is no longer needed once prod is being promoted.
+        stage("Teardown Stage Before Prod") {
             when {
                 allOf {
                     branch "main"
@@ -564,7 +578,59 @@ pipeline {
             }
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/k8s-teardown.sh stage"
+                        // Wait for stage pods to fully terminate and release RAM
+                        // before scheduling prod. Pods have terminationGracePeriodSeconds=30
+                        // so 90s gives them time to disappear from the node.
+                        sh """
+                            echo 'Waiting for stage pods to terminate (max 90s)...'
+                            kubectl -n stage wait --for=delete pod --all --timeout=90s 2>/dev/null || true
+                            echo 'Sleeping 30s extra to let kubelet reclaim memory...'
+                            sleep 30
+                        """
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        stage("Deploy Prod") {
+            when {
+                allOf {
+                    branch "main"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
+            }
+            steps {
+                // Prod cold boot (fresh PVCs, Kafka init) needs more time than stage.
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}",
+                         "INFRA_TIMEOUT=660s",
+                         "SERVICE_TIMEOUT=600s"]) {
                     sh "scripts/ci/k8s-deploy.sh prod"
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        // Capture cluster + pod state as evidence artifact — main branch (prod deploy).
+        stage("Prod Evidence") {
+            when {
+                allOf {
+                    branch "main"
+                    expression { return env.PIPELINE_MODE == 'full' }
+                }
+            }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "scripts/ci/k8s-stage-evidence.sh prod prod-evidence.txt"
+                    }
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: "prod-evidence.txt", allowEmptyArchive: true
                 }
             }
         }
@@ -593,7 +659,7 @@ pipeline {
         // can access it after this stage — unlike withCredentials temp files.
         stage("Scheduled Teardown") {
             when {
-                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV in ['dev', 'stage'] }
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV in ['dev', 'stage', 'prod'] }
             }
             steps {
                 script {
@@ -602,15 +668,17 @@ pipeline {
                         error "TEARDOWN_AFTER_MINUTES must be a non-negative integer. Got: '${raw}'"
                     }
                     int minutes = raw as Integer
+                    // For prod (main branch) the relevant env to teardown is prod
+                    def teardownEnv = (env.BRANCH_NAME == 'main') ? 'prod' : env.DEPLOY_ENV
                     if (minutes > 0) {
-                        echo "Scheduling teardown of '${env.DEPLOY_ENV}' in ${minutes} minute(s)."
+                        echo "Scheduling teardown of '${teardownEnv}' in ${minutes} minute(s)."
                         sh """
                             nohup sh -c \
-                              'sleep ${minutes}m && KUBECONFIG=${env.KUBECONFIG_PATH} scripts/ci/k8s-teardown.sh ${env.DEPLOY_ENV}' \
-                              > /tmp/teardown-${env.DEPLOY_ENV}-${env.BUILD_NUMBER}.log 2>&1 &
+                              'sleep ${minutes}m && KUBECONFIG=${env.KUBECONFIG_PATH} scripts/ci/k8s-teardown.sh ${teardownEnv}' \
+                              > /tmp/teardown-${teardownEnv}-${env.BUILD_NUMBER}.log 2>&1 &
                         """
                     } else {
-                        echo "TEARDOWN_AFTER_MINUTES=0 — environment '${env.DEPLOY_ENV}' will remain running."
+                        echo "TEARDOWN_AFTER_MINUTES=0 — environment '${teardownEnv}' will remain running."
                     }
                 }
             }

@@ -12,13 +12,42 @@ RUN jenkins-plugin-cli -f /usr/share/jenkins/plugins.txt
 # Copy init groovy scripts
 COPY jenkins-init/*.groovy /usr/share/jenkins/ref/init.groovy.d/
 
-# Install additional tools needed for CI/CD
+# Install base dependencies
 RUN apt-get update && apt-get install -y \
-    docker.io \
-    kubectl \
     git \
     curl \
+    wget \
+    gnupg \
+    lsb-release \
+    ca-certificates \
+    apt-transport-https \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI from official Docker repository
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
+    | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
+https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
+    > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Trivy from official Aqua Security repository
+RUN wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
+    | gpg --dearmor -o /usr/share/keyrings/trivy.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] \
+https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" \
+    > /etc/apt/sources.list.d/trivy.list \
+    && apt-get update \
+    && apt-get install -y trivy \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install kubectl from official Kubernetes release
+RUN KUBECTL_VERSION=$(curl -L -s https://dl.k8s.io/release/stable.txt) \
+    && curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/kubectl
 
 # Switch back to jenkins user
 USER jenkins
