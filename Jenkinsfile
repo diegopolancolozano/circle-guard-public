@@ -646,7 +646,7 @@ pipeline {
         // can access it after this stage — unlike withCredentials temp files.
         stage("Scheduled Teardown") {
             when {
-                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV in ['dev', 'stage'] }
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV in ['dev', 'stage', 'prod'] }
             }
             steps {
                 script {
@@ -655,15 +655,17 @@ pipeline {
                         error "TEARDOWN_AFTER_MINUTES must be a non-negative integer. Got: '${raw}'"
                     }
                     int minutes = raw as Integer
+                    // For prod (main branch) the relevant env to teardown is prod
+                    def teardownEnv = (env.BRANCH_NAME == 'main') ? 'prod' : env.DEPLOY_ENV
                     if (minutes > 0) {
-                        echo "Scheduling teardown of '${env.DEPLOY_ENV}' in ${minutes} minute(s)."
+                        echo "Scheduling teardown of '${teardownEnv}' in ${minutes} minute(s)."
                         sh """
                             nohup sh -c \
-                              'sleep ${minutes}m && KUBECONFIG=${env.KUBECONFIG_PATH} scripts/ci/k8s-teardown.sh ${env.DEPLOY_ENV}' \
-                              > /tmp/teardown-${env.DEPLOY_ENV}-${env.BUILD_NUMBER}.log 2>&1 &
+                              'sleep ${minutes}m && KUBECONFIG=${env.KUBECONFIG_PATH} scripts/ci/k8s-teardown.sh ${teardownEnv}' \
+                              > /tmp/teardown-${teardownEnv}-${env.BUILD_NUMBER}.log 2>&1 &
                         """
                     } else {
-                        echo "TEARDOWN_AFTER_MINUTES=0 — environment '${env.DEPLOY_ENV}' will remain running."
+                        echo "TEARDOWN_AFTER_MINUTES=0 — environment '${teardownEnv}' will remain running."
                     }
                 }
             }
