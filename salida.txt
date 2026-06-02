@@ -6,7 +6,7 @@ FAILURE: Build failed with an exception.
 
 * What went wrong:
 Gradle build daemon disappeared unexpectedly (it may have been killed or may have crashed)
-
+//
 * Try:
 > Run with --stacktrace option to get the stack trace.
 > Run with --info or --debug option to get more log output.
