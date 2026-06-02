@@ -12,15 +12,15 @@ spec:
         - name: kafka
           env:
             - name: KAFKA_HEAP_OPTS
-              value: "-Xmx192m -Xms96m"
+              value: "-Xmx128m -Xms64m"
             - name: KAFKA_JVM_PERFORMANCE_OPTS
               value: "-XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:+ExplicitGCInvokesConcurrent"
           resources:
             requests:
-              memory: "256Mi"
+              memory: "192Mi"
               cpu: "100m"
             limits:
-              memory: "384Mi"
+              memory: "320Mi"
               cpu: "300m"
 
 ---
