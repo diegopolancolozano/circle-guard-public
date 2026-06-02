@@ -52,7 +52,7 @@ pipeline {
         string(
             name: 'TEARDOWN_AFTER_MINUTES',
             defaultValue: '5',
-            description: 'Minutes to wait before scaling dev/stage to zero. Use 0 to keep running.'
+            description: 'Minutes to wait before scaling the environment to zero. Use 0 to keep running.'
         )
     }
 
