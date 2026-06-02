@@ -42,7 +42,9 @@ wait_for_health() {
 wait_for_deployment() {
   local service_name="$1"
   echo "=== Waiting for deployment/${service_name} to be Available in namespace ${ENVIRONMENT} ===" >&2
-  kubectl -n "$ENVIRONMENT" wait --for=condition=Available "deployment/${service_name}" --timeout=180s
+  # Redirect stdout to stderr: this function is called inside $() so any stdout
+  # would be captured into the variable along with the URL — corrupting it.
+  kubectl -n "$ENVIRONMENT" wait --for=condition=Available "deployment/${service_name}" --timeout=180s >&2
 }
 
 # Start a port-forward, register its PID in the PID file, wait for health.

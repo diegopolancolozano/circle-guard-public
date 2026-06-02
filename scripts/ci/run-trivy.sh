@@ -18,14 +18,25 @@ SERVICES=(
 RESULTS_DIR="${WORKSPACE:-${PWD}}/tests/security/results"
 mkdir -p "${RESULTS_DIR}"
 
-TRIVY_IMAGE="${TRIVY_IMAGE:-aquasec/trivy:0.52.2}"
 TRIVY_SEVERITY="${TRIVY_SEVERITY:-HIGH,CRITICAL}"
 TRIVY_EXIT_CODE="${TRIVY_EXIT_CODE:-0}"
+<<<<<<< HEAD
+=======
+
+# Verify trivy is available
+if ! command -v trivy &>/dev/null; then
+  echo "ERROR: trivy binary not found in PATH. Install it in the Jenkins image." >&2
+  exit 1
+fi
+>>>>>>> 592fff0fd61db2e7d7a088e30a55876516a9f768
 
 scan_image() {
   local image_ref="$1"
   local safe_name="$2"
+  local json_out="${RESULTS_DIR}/trivy-${safe_name}.json"
+  local txt_out="${RESULTS_DIR}/trivy-${safe_name}.txt"
 
+<<<<<<< HEAD
   # trivy-cache persists the vuln DB across builds — avoids re-downloading on every run
   docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
@@ -33,10 +44,18 @@ scan_image() {
     -v "${RESULTS_DIR}:/output" \
     "${TRIVY_IMAGE}" \
     image --severity "${TRIVY_SEVERITY}" --ignore-unfixed \
+=======
+  # Scan to JSON
+  trivy image \
+    --severity "${TRIVY_SEVERITY}" \
+    --ignore-unfixed \
+>>>>>>> 592fff0fd61db2e7d7a088e30a55876516a9f768
     --exit-code "${TRIVY_EXIT_CODE}" \
-    --format json --output "/output/trivy-${safe_name}.json" \
+    --format json \
+    --output "${json_out}" \
     "${image_ref}"
 
+<<<<<<< HEAD
   docker run --rm \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v trivy-cache:/root/.cache/trivy \
@@ -46,6 +65,13 @@ scan_image() {
     --exit-code 0 \
     --format table --output "/output/trivy-${safe_name}.txt" \
     "${image_ref}"
+=======
+  # Convert JSON to table (no re-scan)
+  trivy convert \
+    --format table \
+    --output "${txt_out}" \
+    "${json_out}"
+>>>>>>> 592fff0fd61db2e7d7a088e30a55876516a9f768
 }
 
 for service_dir in "${SERVICES[@]}"; do

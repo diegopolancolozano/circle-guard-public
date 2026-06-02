@@ -18,8 +18,8 @@ SERVICES=(
   circleguard-identity-service
   circleguard-promotion-service
   circleguard-gateway-service
-  circleguard-form-service
-  circleguard-notification-service
+  circleguard-dashboard-service
+  circleguard-file-service
   postgres
   redis
   neo4j

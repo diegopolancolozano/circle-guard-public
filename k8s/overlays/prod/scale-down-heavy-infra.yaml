@@ -1,0 +1,18 @@
+# Prod overlay: scale down memory-heavy infra not critical for the prod demo.
+# The cluster (3x s-2vcpu-4gb = 12 GB) doesn't have enough RAM to run
+# stage + prod simultaneously. Stage is torn down before prod deploys,
+# but neo4j and openldap are still kept at 0 to free RAM for app services.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neo4j
+spec:
+  replicas: 0
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openldap
+spec:
+  replicas: 0

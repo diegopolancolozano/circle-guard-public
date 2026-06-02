@@ -13,6 +13,12 @@ services:
       - JAVA_OPTS=-Xmx1536m -Xms512m
     env_file:
       - .env.jenkins.example
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1.5G
     extra_hosts:
       - "kubernetes.docker.internal:host-gateway"
     volumes:
