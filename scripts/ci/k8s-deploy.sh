@@ -67,11 +67,21 @@ done
 
 kubectl apply -k "k8s/overlays/${ENVIRONMENT}" --validate=false
 
-# Restart infra deployments so pods pick up updated resource requests from the overlay.
-# Without this, old ReplicaSets keep their original resource spec.
-echo "=== Restarting infra deployments to apply new resource limits ==="
+# Restart infra deployments ONLY if their pod is stuck in Pending.
+# Running infra pods are NOT restarted — RollingUpdate would try to schedule
+# a second pod before terminating the first, which fails on memory-constrained clusters.
+echo "=== Restarting infra deployments stuck in Pending ==="
 for infra_dep in kafka zookeeper postgres redis; do
-  kubectl -n "$ENVIRONMENT" rollout restart "deployment/${infra_dep}" 2>/dev/null || true
+  pending=$(kubectl -n "$ENVIRONMENT" get pods -l "app=${infra_dep}" \
+    --field-selector=status.phase==Pending --no-headers 2>/dev/null | wc -l || echo 0)
+  running=$(kubectl -n "$ENVIRONMENT" get pods -l "app=${infra_dep}" \
+    --field-selector=status.phase==Running --no-headers 2>/dev/null | wc -l || echo 0)
+  if [ "$pending" -gt 0 ] && [ "$running" -eq 0 ]; then
+    echo "  ${infra_dep}: stuck in Pending, forcing restart"
+    kubectl -n "$ENVIRONMENT" rollout restart "deployment/${infra_dep}" 2>/dev/null || true
+  else
+    echo "  ${infra_dep}: skipping restart (running=${running}, pending=${pending})"
+  fi
 done
 
 # Force-restart app services so pods pick up any Secret/ConfigMap changes.
