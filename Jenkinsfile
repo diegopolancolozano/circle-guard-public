@@ -298,21 +298,12 @@ pipeline {
             }
             steps {
                 script {
-                    def changed = sh(
-                        script: "git diff --name-only HEAD~1..HEAD 2>/dev/null || true",
-                        returnStdout: true
-                    ).trim()
-                    boolean needBuild = !changed || (changed =~ /(services\/|Dockerfile|build\.gradle|settings\.gradle|gradlew|mobile\/|gradle\/)/)
-                    if (needBuild) {
-                        withCredentials([usernamePassword(
-                            credentialsId: env.DOCKER_CREDENTIALS_ID,
-                            usernameVariable: 'DOCKERHUB_USERNAME',
-                            passwordVariable: 'DOCKERHUB_PASSWORD'
-                        )]) {
-                            sh "scripts/ci/build-and-push-images.sh '${env.IMAGE_TAGS}' '${env.DOCKER_IMAGE_PREFIX}' '${DOCKERHUB_USERNAME}' '${DOCKERHUB_PASSWORD}'"
-                        }
-                    } else {
-                        echo "No service/Dockerfile changes detected — skipping image build.\nChanged: ${changed}"
+                    withCredentials([usernamePassword(
+                        credentialsId: env.DOCKER_CREDENTIALS_ID,
+                        usernameVariable: 'DOCKERHUB_USERNAME',
+                        passwordVariable: 'DOCKERHUB_PASSWORD'
+                    )]) {
+                        sh "scripts/ci/build-and-push-images.sh '${env.IMAGE_TAGS}' '${env.DOCKER_IMAGE_PREFIX}' '${DOCKERHUB_USERNAME}' '${DOCKERHUB_PASSWORD}'"
                     }
                 }
             }

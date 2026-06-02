@@ -18,33 +18,32 @@ SERVICES=(
 RESULTS_DIR="${WORKSPACE:-${PWD}}/tests/security/results"
 mkdir -p "${RESULTS_DIR}"
 
-TRIVY_IMAGE="${TRIVY_IMAGE:-aquasec/trivy:0.52.2}"
 TRIVY_SEVERITY="${TRIVY_SEVERITY:-HIGH,CRITICAL}"
 TRIVY_EXIT_CODE="${TRIVY_EXIT_CODE:-0}"
+
+# Verify trivy is available
+if ! command -v trivy &>/dev/null; then
+  echo "ERROR: trivy binary not found in PATH. Install it in the Jenkins image." >&2
+  exit 1
+fi
 
 scan_image() {
   local image_ref="$1"
   local safe_name="$2"
-  local json_out="/output/trivy-${safe_name}.json"
-  local txt_out="/output/trivy-${safe_name}.txt"
+  local json_out="${RESULTS_DIR}/trivy-${safe_name}.json"
+  local txt_out="${RESULTS_DIR}/trivy-${safe_name}.txt"
 
-  # ── Single scan → JSON (trivy-cache named volume avoids re-downloading the DB) ──
-  docker run --rm \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v trivy-cache:/root/.cache/trivy \
-    -v "${RESULTS_DIR}:/output" \
-    "${TRIVY_IMAGE}" \
-    image --severity "${TRIVY_SEVERITY}" --ignore-unfixed \
+  # Scan to JSON
+  trivy image \
+    --severity "${TRIVY_SEVERITY}" \
+    --ignore-unfixed \
     --exit-code "${TRIVY_EXIT_CODE}" \
-    --format json --output "${json_out}" \
+    --format json \
+    --output "${json_out}" \
     "${image_ref}"
 
-  # ── Convert JSON → table (no re-scan, no DB download: trivy convert reads the file) ──
-  # trivy convert was introduced in v0.48; current image is v0.52.2.
-  docker run --rm \
-    -v "${RESULTS_DIR}:/output" \
-    "${TRIVY_IMAGE}" \
-    convert \
+  # Convert JSON to table (no re-scan)
+  trivy convert \
     --format table \
     --output "${txt_out}" \
     "${json_out}"
