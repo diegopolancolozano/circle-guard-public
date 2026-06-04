@@ -31,8 +31,8 @@ pipeline {
         )
         choice(
             name: 'CLOUD_TARGET',
-            choices: ['digitalocean', 'gcp', 'local', 'multi'],
-            description: 'Target cloud. digitalocean = DOKS; gcp = GKE; multi = DO + GCP sequentially.'
+            choices: ['gcp', 'digitalocean', 'local', 'multi'],
+            description: 'Target cloud. gcp = GKE (primary); digitalocean = DOKS (backup); multi = GCP then DO sequentially.'
         )
         string(
             name: 'GCP_PROJECT',
@@ -93,11 +93,11 @@ pipeline {
                     env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'full').trim()
                     env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'digitalocean').trim()
 
-                    // Webhook builds on deploy branches → always full + DO
+                    // Webhook builds on deploy branches → always full + GCP (primary)
                     def isWebhook = !currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
                     if (isWebhook && env.BRANCH_NAME in ['dev', 'stage', 'main']) {
                         env.PIPELINE_MODE = 'full'
-                        if (env.CLOUD_TARGET == 'gcp') { env.CLOUD_TARGET = 'digitalocean' }
+                        if (env.CLOUD_TARGET == 'local') { env.CLOUD_TARGET = 'gcp' }
                         echo "Webhook build on ${env.BRANCH_NAME} → PIPELINE_MODE=full, CLOUD_TARGET=${env.CLOUD_TARGET}"
                     }
 
