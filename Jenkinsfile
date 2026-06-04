@@ -655,14 +655,21 @@ pipeline {
                         error "TEARDOWN_AFTER_MINUTES must be a non-negative integer. Got: '${raw}'"
                     }
                     int minutes = raw as Integer
-                    // For prod (main branch) the relevant env to teardown is prod
                     def teardownEnv = (env.BRANCH_NAME == 'main') ? 'prod' : env.DEPLOY_ENV
                     if (minutes > 0) {
                         echo "Scheduling teardown of '${teardownEnv}' in ${minutes} minute(s)."
+                        // Copy kubeconfig to a stable path outside the workspace so it
+                        // survives after post{always} deletes KUBECONFIG_PATH.
+                        def stableKubeconfig = "/tmp/kubeconfig-teardown-${env.BUILD_NUMBER}"
                         sh """
+                            cp '${env.KUBECONFIG_PATH}' '${stableKubeconfig}'
+                            chmod 600 '${stableKubeconfig}'
                             nohup sh -c \
-                              'sleep ${minutes}m && KUBECONFIG=${env.KUBECONFIG_PATH} scripts/ci/k8s-teardown.sh ${teardownEnv}' \
+                              'sleep ${minutes}m \
+                               && KUBECONFIG=${stableKubeconfig} ${env.WORKSPACE}/scripts/ci/k8s-teardown.sh ${teardownEnv} \
+                               && rm -f ${stableKubeconfig}' \
                               > /tmp/teardown-${teardownEnv}-${env.BUILD_NUMBER}.log 2>&1 &
+                            echo "Teardown scheduled (PID \$!), log: /tmp/teardown-${teardownEnv}-${env.BUILD_NUMBER}.log"
                         """
                     } else {
                         echo "TEARDOWN_AFTER_MINUTES=0 — environment '${teardownEnv}' will remain running."
