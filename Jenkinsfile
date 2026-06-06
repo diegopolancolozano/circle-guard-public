@@ -150,8 +150,10 @@ pipeline {
 
                     // Per-environment GCP defaults (can be overridden via params).
                     if (env.CLOUD_TARGET in ['gcp', 'multi']) {
-                        env.RESOLVED_GCP_PROJECT      = (params.GCP_PROJECT?.trim())      ?: "YOUR_GCP_PROJECT"
-                        env.RESOLVED_GKE_CLUSTER_NAME = (params.GKE_CLUSTER_NAME?.trim()) ?: "circleguard-${env.DEPLOY_ENV ?: 'stage'}"
+                        env.RESOLVED_GCP_PROJECT      = (params.GCP_PROJECT?.trim())          ?: "project-61c89277-1b90-444b-bc4"
+                        // El cluster GKE disponible es siempre circleguard-stage;
+                        // el namespace de destino lo controla DEPLOY_ENV (stage/prod).
+                        env.RESOLVED_GKE_CLUSTER_NAME = (params.GKE_CLUSTER_NAME?.trim())     ?: "circleguard-stage"
                         env.RESOLVED_GKE_LOCATION     = (params.GKE_CLUSTER_LOCATION?.trim()) ?: "us-central1"
                         echo "GCP target => project=${env.RESOLVED_GCP_PROJECT} cluster=${env.RESOLVED_GKE_CLUSTER_NAME} location=${env.RESOLVED_GKE_LOCATION}"
                     }
@@ -264,12 +266,13 @@ pipeline {
                 script {
                     if (env.CLOUD_TARGET in ['gcp', 'multi']) {
                         withCredentials([file(credentialsId: env.GCP_SA_CREDENTIALS_ID, variable: 'GCP_SA_FILE')]) {
+                            // \$GCP_SA_FILE → shell interpola (no Groovy), evita el warning de interpolación insegura
                             sh """
-                                KUBECONFIG="${env.KUBECONFIG_PATH}" \
-                                GCP_SA_FILE="${GCP_SA_FILE}" \
-                                GCP_PROJECT="${env.RESOLVED_GCP_PROJECT}" \
-                                GKE_CLUSTER_NAME="${env.RESOLVED_GKE_CLUSTER_NAME}" \
-                                GKE_CLUSTER_LOCATION="${env.RESOLVED_GKE_LOCATION}" \
+                                KUBECONFIG='${env.KUBECONFIG_PATH}' \
+                                GCP_SA_FILE="\$GCP_SA_FILE" \
+                                GCP_PROJECT='${env.RESOLVED_GCP_PROJECT}' \
+                                GKE_CLUSTER_NAME='${env.RESOLVED_GKE_CLUSTER_NAME}' \
+                                GKE_CLUSTER_LOCATION='${env.RESOLVED_GKE_LOCATION}' \
                                 scripts/ci/ensure-gke-access.sh
                             """
                         }
