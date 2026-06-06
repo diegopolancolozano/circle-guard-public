@@ -9,7 +9,8 @@
 //   gcp           → GKE auth via SA JSON credential 'gcp-sa-credentials'  [DEFAULT/PRIMARY]
 //   digitalocean  → kubeconfig from Jenkins credential 'kubeconfig-do-credentials'
 //   local         → kubeconfig from Jenkins credential 'kubeconfig-credentials'
-//   multi         → run the pipeline twice (once with GCP, once with DO)
+//   multi         → deploy to BOTH clouds in one run: GCP first (primary), then
+//                   DigitalOcean (backup) via the 'Deploy DigitalOcean' stage
 //
 // Required Jenkins credentials:
 //   dockerhub-credentials     — Username/Password (DockerHub)
@@ -159,7 +160,7 @@ pipeline {
                     }
 
                     if (env.CLOUD_TARGET == 'multi') {
-                        echo "MULTI-CLOUD mode: run this pipeline twice — once with CLOUD_TARGET=digitalocean and once with CLOUD_TARGET=gcp."
+                        echo "MULTI-CLOUD mode: deploy GCP (primary) first, then DigitalOcean (backup) in the 'Deploy DigitalOcean (multi-cloud)' stage of this same run."
                         echo "See docs/MULTICLOUD_GCP_DO.md for the staged rollout strategy."
                     }
                 }
@@ -381,6 +382,44 @@ pipeline {
                     script {
                         def targetEnv = (env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV
                         sh "scripts/ci/k8s-deploy.sh ${targetEnv}"
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
+        // MULTI-CLOUD: after the primary GCP deploy, also deploy to DigitalOcean
+        // in the SAME pipeline run. Reconfigures a second kubeconfig (DOKS) and
+        // runs deploy + smoke against it. Only fires when CLOUD_TARGET=multi.
+        stage("Deploy DigitalOcean (multi-cloud)") {
+            when {
+                expression {
+                    return env.PIPELINE_MODE == 'full' &&
+                           env.CLOUD_TARGET == 'multi' &&
+                           env.DEPLOY_ENV?.trim()
+                }
+            }
+            steps {
+                script {
+                    def doKubeconfig = "${env.KUBECONFIG_PATH}.do"
+                    def targetEnv = (env.BRANCH_NAME == 'main') ? 'stage' : env.DEPLOY_ENV
+
+                    // Write the DOKS kubeconfig to a separate path so the GCP one
+                    // (KUBECONFIG_PATH) stays intact for later prod/evidence stages.
+                    withCredentials([file(credentialsId: 'kubeconfig-do-credentials', variable: 'DO_KUBE')]) {
+                        sh """
+                            cp "\${DO_KUBE}" "${doKubeconfig}"
+                            chmod 600 "${doKubeconfig}"
+                        """
+                    }
+
+                    withEnv(["KUBECONFIG=${doKubeconfig}"]) {
+                        sh "kubectl config current-context"
+                        echo "=== MULTI-CLOUD: deploying ${targetEnv} to DigitalOcean (DOKS) ==="
+                        sh "scripts/ci/k8s-deploy.sh ${targetEnv}"
+                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                            sh "scripts/ci/k8s-smoke-tests.sh ${targetEnv}"
+                        }
                     }
                 }
             }
