@@ -6,10 +6,10 @@
 //   full     → reduced + Docker push + K8s deploy + Smoke/E2E/Perf/Security
 //
 // CLOUD_TARGET (full mode only):
-//   local         → kubeconfig from Jenkins credential 'kubeconfig-credentials'
+//   gcp           → GKE auth via SA JSON credential 'gcp-sa-credentials'  [DEFAULT/PRIMARY]
 //   digitalocean  → kubeconfig from Jenkins credential 'kubeconfig-do-credentials'
-//   gcp           → GKE auth via SA JSON credential 'gcp-sa-credentials'
-//   multi         → run the pipeline twice (once with DO, once with GCP)
+//   local         → kubeconfig from Jenkins credential 'kubeconfig-credentials'
+//   multi         → run the pipeline twice (once with GCP, once with DO)
 //
 // Required Jenkins credentials:
 //   dockerhub-credentials     — Username/Password (DockerHub)
@@ -91,13 +91,13 @@ pipeline {
             steps {
                 script {
                     env.PIPELINE_MODE = (params.PIPELINE_MODE ?: 'full').trim()
-                    env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'digitalocean').trim()
+                    env.CLOUD_TARGET  = (params.CLOUD_TARGET  ?: 'gcp').trim()
 
                     // Webhook builds on deploy branches → always full + GCP (primary)
                     def isWebhook = !currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
                     if (isWebhook && env.BRANCH_NAME in ['dev', 'stage', 'main']) {
                         env.PIPELINE_MODE = 'full'
-                        if (env.CLOUD_TARGET == 'local') { env.CLOUD_TARGET = 'gcp' }
+                        if (env.CLOUD_TARGET in ['local', 'digitalocean']) { env.CLOUD_TARGET = 'gcp' }
                         echo "Webhook build on ${env.BRANCH_NAME} → PIPELINE_MODE=full, CLOUD_TARGET=${env.CLOUD_TARGET}"
                     }
 

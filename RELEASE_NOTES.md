@@ -1,0 +1,242 @@
+# Release Notes (2026-06-04)
+
+## Features
+- feat: add gcp-provision.sh to bootstrap GKE cluster from .env
+- feat: set GCP as primary cloud; update multicloud doc to cover rubric
+- feat(prod): add promote-to-prod script (stage images → prod + k8s deploy)
+- feat(observability+security): activate ELK stack and implement TLS with cert-manager
+- feat(prod): complete prod overlay with imagePullPolicy and Prod Evidence stage
+- feat: distributed tracing, E2E auth tests and operations manual
+- feat: distributed tracing, E2E auth tests and operations manual
+- feat: observability stack, RBAC and enhanced performance tests
+- feat: observability stack, RBAC and enhanced performance tests
+- feat: design patterns, CI scripts and unit tests for design patterns
+- feat: design patterns, CI scripts and unit tests for design patterns
+- feat: distributed tracing, E2E auth tests and operations manual
+- feat: distributed tracing, E2E auth tests and operations manual
+- feat: observability stack, RBAC and enhanced performance tests
+- feat: observability stack, RBAC and enhanced performance tests
+- feat: design patterns, CI scripts and unit tests for design patterns
+- feat: design patterns, CI scripts and unit tests for design patterns
+- feat: added test
+
+## Fixes
+- fix: copy kubeconfig to stable /tmp path before nohup teardown
+- fix: set strategy Recreate on all infra deployments in stage/dev overlays
+- fix: only restart infra pods stuck in Pending, not Running ones
+- fix: reduce kafka memory request to 192Mi in dev and stage overlays
+- fix: delete Pending infra pods and restart infra deployments on each deploy
+- fix: apply reduce-resources patch to dev overlay (Insufficient memory)
+- fix: increase Gradle daemon heap to 768m to prevent OOM during compileKotlin
+- fix: revert teardown sleep unit back to minutes
+- fix: scheduled teardown now covers prod (main branch) after Deploy Prod
+- fix: reduce memory requests in stage overlay to fix FailedScheduling
+- fix: install docker-ce-cli and trivy from official apt repos in Jenkins image
+- fix: use docker-ce-cli from official repo; fix secret interpolation in sh
+- fix: install kubectl and trivy as binaries in Jenkins; always push images
+- fix(infra): improve metrics-server installation with local manifest and RBAC
+- fix(infra): add metrics-server installation for HPA autoscaling
+- fix(infra): add memory limits to Jenkins container in docker-compose
+- fix(prod): prevent node OOM on 3x4GB cluster
+- fix(prod): wait for stage pod termination before deploying prod + increase timeouts
+- fix(prod): teardown stage before prod deploy + add scale-down-heavy-infra patch
+- fix(e2e): kubectl wait stdout corrupts URL variable when called inside $()
+- fix(pipeline): restore full-mode defaults and add service mesh (Istio)
+- fix: NetworkPolicy bloquea egreso de smoke-curl, locust y zap
+- fix: NetworkPolicy bloquea egreso de smoke-curl, locust y zap
+- fix: smoke-curl sleep 1800s, zap como pod in-cluster sin port-forward
+- fix: smoke-curl sleep 1800s, zap como pod in-cluster sin port-forward
+- fix: zap imagen nueva ghcr.io, trivy cache volumen, redis health deshabilitado
+- fix: zap imagen nueva ghcr.io, trivy cache volumen, redis health deshabilitado
+- fix: trivy escanea solo tag de entorno, locust K8s-only, metrics sin CSV no falla
+- fix: trivy escanea solo tag de entorno, locust K8s-only, metrics sin CSV no falla
+- fix: kubectl version sin --short (eliminado en kubectl 1.28+)
+- fix: kubectl version sin --short (eliminado en kubectl 1.28+)
+- fix: kafka OOM crash y health indicators de infra en servicios app
+- fix: kafka OOM crash y health indicators de infra en servicios app
+- fix: force pod restart on deploy y evidence sin fallar en deployments escalados a 0
+- fix: force pod restart on deploy y evidence sin fallar en deployments escalados a 0
+- fix: corrección de 4 stages amarillos en pipeline CI
+- fix: corrección de 4 stages amarillos en pipeline CI
+- fix: pipeline runs full mode on webhook builds for dev/stage/main
+- fix: pipeline runs full mode on webhook builds for dev/stage/main
+- fix: read jwt.secret and qr.secret from properties instead of QR_SECRET env var
+- fix: read jwt.secret and qr.secret from properties instead of QR_SECRET env var
+- fix: JWT default secret >= 256 bits to pass WeakKeyException in tests
+- fix: JWT default secret >= 256 bits to pass WeakKeyException in tests
+- fix: fork javac with 256m, drop clean, reduce daemon heap to 512m
+- fix: fork javac with 256m, drop clean, reduce daemon heap to 512m
+- fix: workers.max=1 and test maxHeapSize=256m to prevent OOM on small droplet
+- fix: workers.max=1 and test maxHeapSize=256m to prevent OOM on small droplet
+- fix: gradle.properties mem limits + TC 1.20.4 + correct api.version property
+- fix: gradle.properties mem limits + TC 1.20.4 + correct api.version property
+- fix: use correct api.version property for TC shaded docker-java
+- fix: use correct api.version property for TC shaded docker-java
+- fix: upgrade Testcontainers to 1.20.4 with explicit deps to bypass Spring DM BOM
+- fix: upgrade Testcontainers to 1.20.4 with explicit deps to bypass Spring DM BOM
+- fix: set DOCKER_API_VERSION=1.41 in test JVM via Gradle task
+- fix: set DOCKER_API_VERSION=1.41 in test JVM via Gradle task
+- fix: set DOCKER_API_VERSION=1.41 for test JVM forks
+- fix: set DOCKER_API_VERSION=1.41 for test JVM forks
+- fix: upgrade Testcontainers to 1.20.4 for Docker API 1.40+ compatibility
+- fix: upgrade Testcontainers to 1.20.4 for Docker API 1.40+ compatibility
+- fix(tests): mock CustomUserDetailsService to satisfy SecurityConfig in WebMvc tests
+- fix(k8s): apply neo4j/openldap scale-down patch to dev and master overlays
+- fix(k8s): scale all namespaces to 0 on startup, register Windows scheduled task
+- fix(k8s): revisionHistoryLimit=1 on all deployments to prevent 3x pod accumulation
+- fix(deploy): auto scale-down neo4j/openldap and clean Error pods on every deploy
+- fix(flyway): per-service history table to prevent V1 conflicts on shared DB
+- fix(stage): scale down neo4j+openldap to 0 replicas to save RAM
+- fix(flyway): revert to simple config, keep only @EnableWebSecurity fix
+- fix(flyway): use per-service history table with baseline-on-migrate=true
+- fix(e2e): fix 401 on identity /map and 500 on promotion access-points
+- fix(e2e): add Jackson for JSON serialization and disown port-forwards
+- fix(e2e): pass explicit remote port 8080 to all port-forwards
+- fix(e2e): add sleep 3 after port-forward start before first health check attempt
+- fix(e2e): fix port-forward PID loss in subshell and add stderr-only logging
+- fix(jenkins): add extra_hosts to resolve kubernetes.docker.internal inside container
+- fix(k8s): reduce JVM heap and remove resource requests to avoid OOM on Docker Desktop
+- fix(k8s): fix slow startup and probe timeouts for Spring services
+- fix(e2e): fix all 6 failing E2E tests
+- fix(k8s): fix stage overlay and infra issues
+- fix(auth): read QR_SECRET directly in token services
+- fix(auth): bind jwt.secret to QR_SECRET for startup
+- fix(k8s): create qr-secret as static resource instead of secretGenerator to prevent name hashing
+- fix(auth,gateway): add application.properties to bind QR_SECRET env var to qr.secret property
+- fix(k8s): inject QR_SECRET into auth and gateway deployments
+- fix(auth): define DaoAuthenticationProvider and password encoder beans
+- fix(ci): clean before bootJar to avoid stale auth classes
+- fix(ci): push images to deployed DockerHub namespace
+- fix(auth): make LDAP provider optional and fallback to local auth when LDAP unavailable
+- fix(identity): expose health endpoint correctly for k8s probes
+- fix(identity): allow unauthenticated /actuator/health for k8s probes; enable health probe exposure
+- fix(ci): ensure gke auth plugin and gcloud kube auth
+- fix(ci): harden k8s deploy context and startup readiness
+- fix(k8s): disable Flyway validation on migrate for stage
+- fix(k8s): provide vault secrets for identity service
+- fix(terraform): reference existing qr-secret via data source to avoid conflicts with kustomize secretGenerator
+- fix(terraform): update outputs to reference data source for namespaces
+- fix(terraform): use data source for namespaces to avoid conflicts when already exist
+
+## Docs
+- docs: add namespace management and resource teardown instructions
+
+## Performance
+- perf(ci): reduce pipeline duration by ~15-20 min
+
+## CI
+- ci: trigger build with swap enabled on Jenkins droplet
+- ci: trigger build with swap enabled on Jenkins droplet
+- ci: speed up pipeline by building bootJar for services and skipping tests during quick iterations
+- ci: prevent Jenkins prompt for TEARDOWN, default to false via env var
+- ci: make teardown a manual input step (remove pipeline parameter)
+- ci(smoke): wait deployments, retry HTTP checks, and print diagnostics on failure
+- ci(docker): add missing Dockerfiles for form and notification services
+- ci(docker): use authenticated DockerHub namespace for image pushes
+- ci(jenkins): inject GCP SA file and expose GKE vars to terraform stage
+- ci(terraform): auto-configure GCP creds and enable use_gke via env; mount SA into terraform container
+
+## Chore
+- chore: add k8s-startup-cleanup.ps1 to run after Docker Desktop restart
+
+## Other
+- fix
+- trivy merge fix
+- fix merge
+- change to proc pipeline2
+- merge with ain
+- Merge pull request #85 from diegopolancolozano/master
+- service mesh
+- Merge pull request #84 from diegopolancolozano/stage
+- Merge origin/master into stage and resolve conflicts
+- Merge branch 'stage' of https://github.com/diegopolancolozano/circle-guard-public into dev
+- Merge pull request #82 from diegopolancolozano/dev
+- Merge pull request #81 from diegopolancolozano/dev
+- change to proc the pipeline2
+- change to proc the pipeline2
+- change to proc the pipeline
+- change to proc the pipeline
+- done with the deployment
+- done with the deployment
+- added jenkins infra
+- added jenkins infra
+- added gke, fix environments, update terraform
+- added gke, fix environments, update terraform
+- k8, test, chaos engineering, security, observavility
+- k8, test, chaos engineering, security, observavility
+- Added terraform structure
+- Added terraform structure
+- gcp eliminated
+- gcp eliminated
+- correction to a test
+- correction to a test
+- Merge pull request #80 from diegopolancolozano/stage
+- Merge pull request #80 from diegopolancolozano/stage
+- done with the deployment
+- done with the deployment
+- added jenkins infra
+- added jenkins infra
+- added gke, fix environments, update terraform
+- added gke, fix environments, update terraform
+- k8, test, chaos engineering, security, observavility
+- k8, test, chaos engineering, security, observavility
+- Added terraform structure
+- corrected error in port forwarding
+- gcp eliminated
+- correction to a test
+- CI: ensure Flyway baseline env set in k8s deployments (SPRING_FLYWAY_BASELINE_ON_MIGRATE)
+- CI: optimizar pipeline — prompt teardown, build condicional, paralelizar tests, teardown background
+- general changes to the pipeline
+- Merge branch 'dev' of https://github.com/diegopolancolozano/circle-guard-public into dev
+- uncommented integration test
+- minor change
+- Fix E2E test env var propagation: read System properties and pass -D gradle args
+- Harden k8s deploy preflight with API retries
+- Add missing tests and lightweight Locust metrics output
+- Limit Jenkins to 1 executor and reduce memory - prevent concurrent builds on local machine
+- Merge pull request #1 from diegopolancolozano/stage
+- Merge pull request #2 from diegopolancolozano/stage
+- Comment out identity_map task in Locust (requires auth) - focus on gateway_validate test
+- Fix run-locust.sh: move function definition before invocation and remove duplicates
+- more logs to the locust test
+- locust fix3
+- locust fix
+- locust fix
+- auth correction
+- liminating gcp
+- fix to infra-deployments.yaml
+- procing the pipeline15
+- another paramether to the environment of the jenkins file
+- fix in stage deployment
+- fix in stage deployment
+- reducing time in stage deployment stage
+- fix in some test
+- fix with the database url
+- fix in jenkins file
+- fix main.tf
+- procing the pipeline14
+- fix terraform qr-secret
+- correcting stage pipelinie
+- procing the pipeline13
+- procing the pipeline12
+- correction to dockerhub username
+- correction to dockerhub username
+- procing the pipeline10
+- Fixing docker to take less in the pipelines
+- procing the pipeline9
+- procing the pipeline8
+- procing the pipeline7
+- procing the pipeline6
+- procing the pipeline6
+- procing the pipeline5
+- procing the pipeline5
+- procing the pipeline4
+- infra(terraform): support GKE-driven kubernetes provider (use_gke, cluster data sources)
+- procing the pipeline3
+- procing the pipeline2
+- procing the pipeline
+- evoking pipeline
+- jenkins file modified
+- CI: target six services — replace dashboard/file with form/notification; update k8s, scripts, docs, E2E
+- Files generated
+
