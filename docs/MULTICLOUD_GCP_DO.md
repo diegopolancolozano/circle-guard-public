@@ -6,8 +6,12 @@ CircleGuard opera en dos proveedores cloud simultáneamente:
 
 | Rol | Proveedor | Cluster | Región |
 |-----|-----------|---------|--------|
-| **Primario** | Google Cloud Platform | GKE (`circleguard-prod`) | `us-central1` |
-| **Respaldo** | DigitalOcean | DOKS (`circleguard-do`) | `nyc1` |
+| **Primario** | Google Cloud Platform | GKE (`circleguard-stage`) | `us-central1` |
+| **Respaldo** | DigitalOcean | DOKS (`circleguard-cluster`) | `nyc1` |
+
+> Proyecto GCP: `project-61c89277-1b90-444b-bc4` · Service Account: `circleguard-jenkins`.
+> Cluster DOKS id: `5a66436d-6520-4a50-bcda-2bb40bb07e28`. Ambos clusters corren el stack
+> completo de CircleGuard en el namespace `stage`.
 
 GCP es el proveedor primario por su integración nativa con GKE, autoscaling de nodos, y SLA más alto. DigitalOcean actúa como failover activo — recibe tráfico automáticamente si GCP falla.
 
@@ -97,7 +101,7 @@ kubectl --context=gke_PROJECT_REGION_CLUSTER -n prod get pods
 # En Cloudflare: desactivar el registro A de GCP o bajar su priority
 
 # 3. Verificar que DO está healthy
-kubectl --context=do-nyc1-circleguard-do -n prod get pods
+kubectl --context=do-nyc1-circleguard-cluster -n prod get pods
 
 # 4. Cuando GCP se recupera, re-activar su registro DNS
 ```
