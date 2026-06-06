@@ -34,11 +34,11 @@ fi
 
 GCP_REGION="${GCP_REGION:-us-central1}"
 GCP_ZONE="${GCP_ZONE:-us-central1-a}"
-GKE_CLUSTER_NAME="${GKE_CLUSTER_NAME:-circleguard-prod}"
+GKE_CLUSTER_NAME="${GKE_CLUSTER_NAME:-circleguard-stage}"
 STATE_BUCKET="circleguard-tfstate-${GCP_PROJECT}"
 
-GLOBAL_DIR="${REPO_ROOT}/infra/terraform-gcp/global"
-PROD_DIR="${REPO_ROOT}/infra/terraform-gcp/environments/prod"
+# Usar environment/stage (deletion_protection=false, nodos públicos configurados en tfvars)
+STAGE_DIR="${REPO_ROOT}/infra/terraform-gcp/environments/stage"
 
 # ── Autenticar gcloud ─────────────────────────────────────────────────────────
 echo ""
@@ -64,10 +64,10 @@ if [[ "${DESTROY}" == "--destroy" ]]; then
   read -r -p "¿Seguro? Esto elimina el cluster GKE (s/N): " confirm
   [[ "${confirm}" =~ ^[sS]$ ]] || { echo "Cancelado."; exit 0; }
 
-  cd "${PROD_DIR}"
+  cd "${STAGE_DIR}"
   terraform init -reconfigure \
     -backend-config="bucket=${STATE_BUCKET}" \
-    -backend-config="prefix=terraform-gcp/prod"
+    -backend-config="prefix=terraform-gcp/stage"
   terraform destroy -auto-approve \
     -var="project_id=${GCP_PROJECT}" \
     -var="region=${GCP_REGION}" \
@@ -83,7 +83,6 @@ fi
 echo ""
 echo "=== [3/5] Creando bucket de estado remoto ==="
 
-# Crear el bucket directamente con gsutil si no existe (evita dependencia circular)
 if ! gsutil ls -p "${GCP_PROJECT}" "gs://${STATE_BUCKET}" &>/dev/null; then
   gsutil mb -p "${GCP_PROJECT}" -l "${GCP_REGION}" "gs://${STATE_BUCKET}"
   gsutil versioning set on "gs://${STATE_BUCKET}"
@@ -92,45 +91,35 @@ else
   echo "Bucket ya existe: gs://${STATE_BUCKET}"
 fi
 
-# ── Paso 2: Cluster GKE + VPC + compute ──────────────────────────────────────
+# ── Paso 2: Cluster GKE + VPC ────────────────────────────────────────────────
 echo ""
-echo "=== [4/5] Provisionando VPC + GKE cluster + compute ==="
+echo "=== [4/5] Provisionando VPC + GKE cluster ==="
 
-cd "${PROD_DIR}"
+cd "${STAGE_DIR}"
 
-# Actualizar el backend con el bucket real
-cat > backend.tf <<EOF
-terraform {
-  backend "gcs" {
-    bucket = "${STATE_BUCKET}"
-    prefix = "terraform-gcp/prod"
-  }
-}
-EOF
+# backend "gcs" {} en main.tf es parcial — se completa con los flags de abajo
+terraform init -reconfigure \
+  -backend-config="bucket=${STATE_BUCKET}" \
+  -backend-config="prefix=terraform-gcp/stage"
 
-terraform init -reconfigure
 terraform apply -auto-approve \
   -var="project_id=${GCP_PROJECT}" \
   -var="region=${GCP_REGION}" \
   -var="zone=${GCP_ZONE}" \
   -var="ssh_public_key=${SSH_PUBLIC_KEY}" \
   -var="ssh_user=${GCP_SSH_USER:-deployer}" \
-  -var="gke_cluster_name=${GKE_CLUSTER_NAME}" \
-  -var="gke_node_count=2" \
-  -var="gke_min_nodes=2" \
-  -var="gke_max_nodes=4" \
-  -var="gke_machine_type=e2-standard-2" \
-  -var="gke_disk_size_gb=50"
+  -var="gke_cluster_name=${GKE_CLUSTER_NAME}"
 
 # ── Paso 3: Obtener kubeconfig ────────────────────────────────────────────────
 echo ""
 echo "=== [5/5] Obteniendo kubeconfig de GKE ==="
 
+export USE_GKE_GCLOUD_AUTH_PLUGIN=True
 gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}" \
   --region "${GKE_CLUSTER_LOCATION:-${GCP_REGION}}" \
   --project "${GCP_PROJECT}"
 
-KUBECONFIG_OUT="${REPO_ROOT}/infra/terraform-gcp/kubeconfig-gke-prod.yaml"
+KUBECONFIG_OUT="${REPO_ROOT}/infra/terraform-gcp/kubeconfig-gke-stage.yaml"
 kubectl config view --raw > "${KUBECONFIG_OUT}"
 chmod 600 "${KUBECONFIG_OUT}"
 
@@ -141,10 +130,14 @@ echo " Region:            ${GCP_REGION}"
 echo " Proyecto:          ${GCP_PROJECT}"
 echo " kubeconfig:        ${KUBECONFIG_OUT}"
 echo ""
-echo " Próximo paso — subir el kubeconfig a Jenkins:"
+echo " Próximo paso 1 — deploy workloads:"
+echo "   kubectl apply -k ${REPO_ROOT}/k8s/overlays/stage"
+echo "   kubectl get pods -n stage"
+echo ""
+echo " Próximo paso 2 — subir kubeconfig a Jenkins:"
 echo "   Jenkins → Manage Credentials → Add → Secret file"
-echo "   ID: gcp-sa-credentials   File: ${GCP_SA_FILE_EXPANDED}"
-echo "   ID: kubeconfig-gcp-credentials   File: ${KUBECONFIG_OUT}"
+echo "   ID: gcp-sa-credentials     File: ${GCP_SA_FILE_EXPANDED}"
+echo "   ID: kubeconfig-gcp-credentials  File: ${KUBECONFIG_OUT}"
 echo ""
 echo " Luego lanza el pipeline con:"
 echo "   CLOUD_TARGET=gcp"

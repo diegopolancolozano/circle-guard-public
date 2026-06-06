@@ -11,29 +11,10 @@ resource "google_service_account" "gke_nodes" {
   project      = var.project_id
 }
 
-resource "google_project_iam_member" "gke_nodes_log_writer" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
-}
-
-resource "google_project_iam_member" "gke_nodes_metric_writer" {
-  project = var.project_id
-  role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
-}
-
-resource "google_project_iam_member" "gke_nodes_monitoring_viewer" {
-  project = var.project_id
-  role    = "roles/monitoring.viewer"
-  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
-}
-
-resource "google_project_iam_member" "gke_nodes_artifactregistry_reader" {
-  project = var.project_id
-  role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
-}
+# Nota: los IAM bindings (logging.logWriter, monitoring.metricWriter, etc.)
+# requieren roles/resourcemanager.projectIamAdmin en el SA de Terraform.
+# Se omiten aquí para compatibilidad con proyectos donde el SA no tiene ese permiso.
+# El cluster funciona normalmente; solo Cloud Logging/Monitoring integrado quedará inactivo.
 
 # ---------------------------------------------------------------------------
 # GKE cluster — Standard mode (gives full kubectl access)
@@ -44,8 +25,16 @@ resource "google_container_cluster" "primary" {
   project  = var.project_id
 
   # Remove the default node pool immediately; we manage it ourselves below.
+  # node_config aquí controla el nodo bootstrap temporal que GKE crea antes de eliminarlo.
+  # pd-standard (HDD) evita consumir la cuota SSD_TOTAL_GB durante la inicialización.
   remove_default_node_pool = true
   initial_node_count       = 1
+
+  node_config {
+    disk_type    = "pd-standard"
+    disk_size_gb = 20
+    machine_type = "e2-medium"
+  }
 
   network    = var.network_name
   subnetwork = var.subnet_name
@@ -117,7 +106,7 @@ resource "google_container_node_pool" "primary_nodes" {
   node_config {
     machine_type    = var.machine_type
     disk_size_gb    = var.disk_size_gb
-    disk_type       = "pd-balanced"
+    disk_type       = var.disk_type
     image_type      = "COS_CONTAINERD"
     service_account = google_service_account.gke_nodes.email
 

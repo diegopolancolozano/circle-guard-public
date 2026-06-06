@@ -107,3 +107,9 @@ variable "deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "disk_type" {
+  description = "Tipo de disco para los nodos. pd-standard = HDD (sin cuota SSD). pd-balanced = SSD balanceado."
+  type        = string
+  default     = "pd-standard"
+}

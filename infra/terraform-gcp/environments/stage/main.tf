@@ -1,8 +1,5 @@
 terraform {
-  backend "gcs" {
-    bucket = "circleguard-tfstate"
-    prefix = "terraform-gcp/stage"
-  }
+  backend "gcs" {}  # bucket/prefix passed via -backend-config in gcp-provision.sh
   required_version = ">= 1.6.0"
   required_providers {
     google = {
@@ -62,30 +59,14 @@ module "gke" {
 }
 
 # ---------------------------------------------------------------------------
-# Jenkins service account — needed so the Jenkins VM can call gcloud/kubectl
+# Jenkins service account — creado para referencia futura
+# Los IAM bindings se omiten: requieren roles/resourcemanager.projectIamAdmin
+# que no está disponible en el SA de Terraform de este proyecto.
 # ---------------------------------------------------------------------------
 resource "google_service_account" "jenkins" {
   account_id   = "circleguard-jenkins-stage"
   display_name = "CircleGuard Jenkins CI (stage)"
   project      = var.project_id
-}
-
-resource "google_project_iam_member" "jenkins_container_admin" {
-  project = var.project_id
-  role    = "roles/container.admin"
-  member  = "serviceAccount:${google_service_account.jenkins.email}"
-}
-
-resource "google_project_iam_member" "jenkins_storage_admin" {
-  project = var.project_id
-  role    = "roles/storage.admin"
-  member  = "serviceAccount:${google_service_account.jenkins.email}"
-}
-
-resource "google_project_iam_member" "jenkins_artifact_writer" {
-  project = var.project_id
-  role    = "roles/artifactregistry.writer"
-  member  = "serviceAccount:${google_service_account.jenkins.email}"
 }
 
 # ---------------------------------------------------------------------------
