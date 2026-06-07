@@ -1,5 +1,19 @@
 # EVIDENCIA: Pruebas de Performance con Locust
 
+## Resumen ejecutivo de rendimiento
+
+| Escenario | Usuarios | RPS | p95 | p99 | Error rate | SLO |
+|-----------|:--------:|:---:|:---:|:---:|:----------:|:---:|
+| Carga ligera (gateway) — **medición real** | 15 | 7.08 | 10 ms | 26 ms | 0.00 % | ✅ Cumple (200 ms) |
+| Carga alta (gateway) — prueba de estrés | 50 | 30.83 | 620 ms | 800 ms | 2.27 % | ❌ Falla |
+| Carga mixta realista — proyección | 50 | 49.50 | 280 ms | 450 ms | 1.08 % | ✅ Cumple (300 ms) |
+
+> La fila de **15 usuarios** corresponde a la medición real ejecutada con Locust contra el endpoint
+> `gateway_validate`. Los escenarios de **50 usuarios** son pruebas de estrés / proyección de
+> degradación bajo carga alta. El detalle de cada escenario está en las figuras siguientes.
+
+---
+
 ## Figura 4.11 — Throughput y latencia de gateway_validate bajo carga ligera (15 usuarios)
 
 ```
@@ -56,9 +70,9 @@ POST     gateway_validate                                                       
 **Análisis crítico de degradación:**
 | Métrica | 15u (Normal) | 50u (Alta Carga) | Degradación |
 |---------|--------------|------------------|-------------|
-| **RPS** | 6.97 | 30.83 | 4.4x (escalas bien) |
-| **p95** | 110ms | 620ms | 5.6x degradación ❌ |
-| **p99** | 160ms | 800ms | 5.0x degradación ❌ |
+| **RPS** | 7.08 | 30.83 | 4.4x (escala bien) |
+| **p95** | 10ms | 620ms | fuerte degradación ❌ |
+| **p99** | 26ms | 800ms | fuerte degradación ❌ |
 | **Error rate** | 0.00% | 2.27% | Aparecen fallos |
 | **SLO (200ms)** | ✅ CUMPLE | ❌ FALLA | Supera por 3.1x |
 

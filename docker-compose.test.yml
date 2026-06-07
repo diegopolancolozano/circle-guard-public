@@ -62,5 +62,12 @@ services:
       - neo4j
       - redis
       - kafka
+    environment:
+      # Ryuk (el reaper de Testcontainers) falla en Docker Desktop/Windows
+      # (IllegalStateException en RyukResourceReaper). Deshabilitarlo permite
+      # que los tests de integración con Testcontainers corran en local.
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     entrypoint: ["/bin/sh", "-c"]
-    command: ["chmod +x ./gradlew || true; ./gradlew test --no-daemon --parallel"]
+    # --continue: no se detiene en el primer fallo, así TODOS los servicios
+    # generan su reporte JaCoCo aunque algún test de integración falle.
+    command: ["chmod +x ./gradlew || true; ./gradlew test jacocoTestReport --no-daemon --continue"]
