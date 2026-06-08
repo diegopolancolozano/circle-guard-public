@@ -147,32 +147,29 @@ data:
 
     [INPUT]
         Name              tail
-        Path              /var/log/pods/dev_circleguard*/**/*.log
+        Path              /var/log/pods/dev_circleguard*/*/*.log
         Path_Key          filename
-        Parser            docker
-        Tag               kube.dev.<pod_name>
-        Tag_Regex         /var/log/pods/dev_(?P<pod_name>[^/]+)/
+        Parser            cri
+        Tag               kube.dev
         Mem_Buf_Limit     5MB
         Skip_Long_Lines   On
         Refresh_Interval  10
 
     [INPUT]
         Name              tail
-        Path              /var/log/pods/stage_circleguard*/**/*.log
+        Path              /var/log/pods/stage_circleguard*/*/*.log
         Path_Key          filename
-        Parser            docker
-        Tag               kube.stage.<pod_name>
-        Tag_Regex         /var/log/pods/stage_(?P<pod_name>[^/]+)/
+        Parser            cri
+        Tag               kube.stage
         Mem_Buf_Limit     5MB
         Skip_Long_Lines   On
 
     [INPUT]
         Name              tail
-        Path              /var/log/pods/prod_circleguard*/**/*.log
+        Path              /var/log/pods/prod_circleguard*/*/*.log
         Path_Key          filename
-        Parser            docker
-        Tag               kube.prod.<pod_name>
-        Tag_Regex         /var/log/pods/prod_(?P<pod_name>[^/]+)/
+        Parser            cri
+        Tag               kube.prod
         Mem_Buf_Limit     5MB
         Skip_Long_Lines   On
 
@@ -198,6 +195,13 @@ data:
         Time_Key    time
         Time_Format %Y-%m-%dT%H:%M:%S.%L
         Time_Keep   On
+
+    [PARSER]
+        Name        cri
+        Format      regex
+        Regex       ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<message>.*)$
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
 
 ---
 apiVersion: apps/v1
