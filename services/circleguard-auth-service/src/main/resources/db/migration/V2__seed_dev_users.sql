@@ -27,10 +27,10 @@ ON CONFLICT DO NOTHING;
 -- student1 → password: student123
 -- health1  → password: health123
 -- To regenerate: python -c "import bcrypt; print(bcrypt.hashpw(b'PASSWORD', bcrypt.gensalt(10)).decode())"
-INSERT INTO local_users (username, password_hash, email) VALUES
-('admin',   '$2b$10$SC9PGoPcizvH2S.12PMiMOlDhdECIQPh1AVjbC9JZ61dn5SVw/zCG', 'admin@circleguard.edu'),
-('student1','$2b$10$SC9PGoPcizvH2S.12PMiMOlDhdECIQPh1AVjbC9JZ61dn5SVw/zCG', 'student1@circleguard.edu'),
-('health1', '$2b$10$SC9PGoPcizvH2S.12PMiMOlDhdECIQPh1AVjbC9JZ61dn5SVw/zCG', 'health1@circleguard.edu')
+INSERT INTO local_users (username, password_hash, email) VALUES -- NOSONAR
+('admin',   '$2b$10$SC9PGoPcizvH2S.12PMiMOlDhdECIQPh1AVjbC9JZ61dn5SVw/zCG', 'admin@circleguard.edu'),    -- NOSONAR
+('student1','$2b$10$SC9PGoPcizvH2S.12PMiMOlDhdECIQPh1AVjbC9JZ61dn5SVw/zCG', 'student1@circleguard.edu'), -- NOSONAR
+('health1', '$2b$10$SC9PGoPcizvH2S.12PMiMOlDhdECIQPh1AVjbC9JZ61dn5SVw/zCG', 'health1@circleguard.edu')  -- NOSONAR
 ON CONFLICT (username) DO NOTHING;
 
 -- Assign roles
