@@ -39,9 +39,24 @@ pipeline {
 
     stages {
 
+        stage('Setup KUBECONFIG') {
+            steps {
+                withCredentials([file(credentialsId: 'kubeconfig-do-credentials', variable: 'KUBE_FILE')]) {
+                    sh """
+                        cp "\${KUBE_FILE}" "${env.WORKSPACE}/.kubeconfig-demo"
+                        chmod 600 "${env.WORKSPACE}/.kubeconfig-demo"
+                    """
+                }
+                script {
+                    env.KUBECONFIG = "${env.WORKSPACE}/.kubeconfig-demo"
+                }
+            }
+        }
+
         stage('STATUS') {
             when { expression { params.ACTION == 'STATUS' } }
             steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                 sh '''
                     echo "========================================"
                     echo " PORT-FORWARDS ACTIVOS"
@@ -60,6 +75,7 @@ pipeline {
                     echo "========================================"
                     kubectl get pods -n monitoring | grep -E "NAME|grafana|prometheus|jaeger"
                 '''
+                } // withEnv
             }
         }
 
@@ -86,6 +102,7 @@ pipeline {
         stage('START - Verificar pods') {
             when { expression { params.ACTION == 'START' } }
             steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                 sh '''
                     echo "=== Pods en stage ==="
                     kubectl get pods -n stage
@@ -97,12 +114,14 @@ pipeline {
                         echo "Todos los pods Running."
                     fi
                 '''
+                } // withEnv
             }
         }
 
         stage('START - Port-forwards') {
             when { expression { params.ACTION == 'START' } }
             steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                 sh '''
                     nohup kubectl -n stage port-forward --address 0.0.0.0 \
                         svc/circleguard-gateway-service 8082:8080 > /tmp/pf-gw.log 2>&1 &
@@ -124,6 +143,7 @@ pipeline {
 
                     sleep 5
                 '''
+                } // withEnv
             }
         }
 
