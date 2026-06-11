@@ -1,13 +1,13 @@
 // =============================================================================
 // Jenkinsfile.demo — Levanta / baja el entorno de demo en DigitalOcean DOKS
 //
-// START  → aplica manifiestos k8s, espera pods Ready, expone 6 servicios como
-//          LoadBalancer, imprime URLs públicas, luego espera N minutos y revierte
-// STOP   → revierte servicios a ClusterIP (pods siguen corriendo — próximo START rápido)
-// STATUS → muestra estado de pods y URLs públicas actuales
+// START  → verifica imágenes, despliega, espera rollout completo, expone 6
+//          servicios como LoadBalancer, imprime URLs, espera N minutos y revierte
+// STOP   → revierte servicios a ClusterIP (pods siguen corriendo)
+// STATUS → muestra pods, servicios y URLs públicas actuales
 //
-// Prerrequisito: imágenes diegoapolancol/circleguard-*:stage en Docker Hub.
-// Si no existen, corre el pipeline principal (DEPLOY_ENV=stage) una vez primero.
+// PRERREQUISITO: imágenes diegoapolancol/circleguard-*:stage en Docker Hub.
+// Si no existen: corre el pipeline principal (DEPLOY_ENV=stage) primero.
 // =============================================================================
 pipeline {
     agent any
@@ -21,7 +21,7 @@ pipeline {
         string(
             name: 'TEARDOWN_AFTER_MINUTES',
             defaultValue: '60',
-            description: 'Minutos antes de revocar el acceso público. 0 = sin teardown automático. Default: 60 (1 hora).'
+            description: 'Minutos antes de revocar acceso público. 0 = sin teardown automático. Default: 60.'
         )
     }
 
@@ -64,28 +64,30 @@ pipeline {
 
                         echo ""
                         echo "=== PODS MONITORING ==="
-                        kubectl get pods -n monitoring -o wide
+                        kubectl get pods -n monitoring
 
                         echo ""
-                        echo "=== SERVICIOS (tipo y IP externa) ==="
-                        kubectl get svc -n stage     --no-headers
-                        kubectl get svc -n monitoring --no-headers
+                        echo "=== SERVICIOS ==="
+                        kubectl get svc -n stage
+                        kubectl get svc -n monitoring
 
                         echo ""
-                        echo "=== URLs PÚBLICAS ACTIVAS ==="
+                        echo "=== IPs EXTERNAS ==="
                         for svc in circleguard-auth-service circleguard-identity-service \
                                    circleguard-promotion-service circleguard-gateway-service \
                                    circleguard-dashboard-service circleguard-file-service; do
                             IP=$(kubectl -n stage get svc $svc \
                                 -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
-                            TYPE=$(kubectl -n stage get svc $svc -o jsonpath='{.spec.type}' 2>/dev/null || true)
-                            echo "  $svc  [$TYPE]  ${IP:-sin IP pública}"
+                            TYPE=$(kubectl -n stage get svc $svc \
+                                -o jsonpath='{.spec.type}' 2>/dev/null || true)
+                            echo "  stage/$svc  [$TYPE]  ${IP:--}"
                         done
                         for svc in grafana prometheus; do
                             IP=$(kubectl -n monitoring get svc $svc \
                                 -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
-                            TYPE=$(kubectl -n monitoring get svc $svc -o jsonpath='{.spec.type}' 2>/dev/null || true)
-                            echo "  $svc  [$TYPE]  ${IP:-sin IP pública}"
+                            TYPE=$(kubectl -n monitoring get svc $svc \
+                                -o jsonpath='{.spec.type}' 2>/dev/null || true)
+                            echo "  monitoring/$svc  [$TYPE]  ${IP:--}"
                         done
                     '''
                 }
@@ -98,12 +100,44 @@ pipeline {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
-                        echo "Revirtiendo servicios a ClusterIP (pods siguen corriendo)..."
                         scripts/ci/k8s-revert-clusterip.sh stage
-                        echo ""
-                        echo "Listo. Los pods siguen activos — próximo START será más rápido."
+                        echo "Listo. Pods siguen activos — próximo START será más rápido."
                     '''
                 }
+            }
+        }
+
+        // ── START: verificar imágenes ──────────────────────────────────────────
+        // Falla rápido (~5s) si las imágenes :stage no existen en Docker Hub.
+        // Sin esto, el rollout tardaría 10 min en fallar por ImagePullBackOff.
+        stage('START - Verificar imágenes') {
+            when { expression { params.ACTION == 'START' } }
+            steps {
+                sh '''
+                    echo "Verificando imágenes :stage en Docker Hub..."
+                    MISSING=0
+                    for svc in auth-service identity-service promotion-service \
+                               gateway-service dashboard-service file-service; do
+                        CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
+                            "https://hub.docker.com/v2/repositories/diegoapolancol/circleguard-${svc}/tags/stage/" \
+                            2>/dev/null || echo "000")
+                        if [ "$CODE" = "200" ]; then
+                            echo "  OK      diegoapolancol/circleguard-${svc}:stage"
+                        else
+                            echo "  FALTA   diegoapolancol/circleguard-${svc}:stage  (HTTP $CODE)"
+                            MISSING=1
+                        fi
+                    done
+
+                    if [ "$MISSING" -ne 0 ]; then
+                        echo ""
+                        echo "SOLUCIÓN: corre el pipeline principal con:"
+                        echo "  PIPELINE_MODE=full  CLOUD_TARGET=digitalocean  DEPLOY_ENV=stage"
+                        echo "Eso construye y sube las imágenes :stage a Docker Hub."
+                        exit 1
+                    fi
+                    echo "Todas las imágenes existen."
+                '''
             }
         }
 
@@ -113,14 +147,11 @@ pipeline {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
-                        echo "Asegurando namespaces..."
                         kubectl apply -f k8s/namespaces.yaml --validate=false
 
-                        echo ""
                         echo "Aplicando overlay stage..."
                         kubectl apply -k k8s/overlays/stage --validate=false
 
-                        echo ""
                         echo "Limpiando pods en Error/CrashLoop..."
                         kubectl -n stage get pods --no-headers 2>/dev/null \
                           | awk '$3=="Error"||$3=="CrashLoopBackOff"||$3=="OOMKilled"{print $1}' \
@@ -128,65 +159,79 @@ pipeline {
                               --ignore-not-found 2>/dev/null || true
 
                         echo ""
-                        echo "Estado inicial:"
                         kubectl get pods -n stage
                     '''
                 }
             }
         }
 
-        // ── START: esperar pods ────────────────────────────────────────────────
-        stage('START - Esperar pods Ready') {
+        // ── START: esperar rollout completo ────────────────────────────────────
+        // Usa kubectl rollout status (no wait_pod personalizado) para esperar la
+        // revisión NUEVA del deployment. Evita la race condition donde wait_pod
+        // detectaba pods viejos como Running antes de que el rolling update los
+        // matara y los nuevos quedaran en ImagePullBackOff sin backends.
+        stage('START - Esperar rollout completo') {
             when { expression { params.ACTION == 'START' } }
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
-                        echo "Esperando pods Running 1/1 (Spring Boot tarda 2-5 min en arrancar)..."
-                        echo "Si ves ImagePullBackOff, corre primero el pipeline principal con DEPLOY_ENV=stage."
-                        echo ""
+                        echo "Esperando postgres y redis (infra base)..."
+                        kubectl -n stage rollout status deployment/postgres --timeout=360s \
+                            || { echo "FAIL: postgres no arrancó"; kubectl -n stage describe pods -l app=postgres | tail -20; exit 1; }
+                        kubectl -n stage rollout status deployment/redis    --timeout=180s \
+                            || { echo "FAIL: redis no arrancó";    kubectl -n stage describe pods -l app=redis    | tail -20; exit 1; }
+                        echo "  postgres OK, redis OK"
 
-                        wait_pod() {
-                            APP=$1; MAX=$2
-                            for i in $(seq 1 $MAX); do
-                                STATUS=$(kubectl -n stage get pods -l app=$APP --no-headers 2>/dev/null \
-                                    | awk '{print $3}' | head -1)
-                                READY=$(kubectl -n stage get pods -l app=$APP --no-headers 2>/dev/null \
-                                    | awk '{print $2}' | head -1)
-                                if [ "$STATUS" = "Running" ] && [ "$READY" = "1/1" ]; then
-                                    echo "  OK  $APP"
-                                    return 0
-                                fi
-                                if [ "$STATUS" = "ImagePullBackOff" ] || [ "$STATUS" = "ErrImagePull" ]; then
-                                    echo "  FAIL $APP: imagen :stage no existe en Docker Hub."
-                                    echo "       Corre el pipeline principal (DEPLOY_ENV=stage) para construirla."
-                                    return 1
-                                fi
-                                [ $(( i % 6 )) -eq 0 ] && echo "  ... $APP [$STATUS $READY] (~$((i*10))s)"
-                                sleep 10
-                            done
-                            echo "  TIMEOUT $APP"
-                            kubectl -n stage describe pods -l app=$APP | tail -30 || true
+                        echo ""
+                        echo "Esperando los 6 servicios Java en paralelo (Spring Boot tarda 2-5 min)..."
+                        echo "Timeout: 15 min por servicio."
+
+                        rollout_wait() {
+                            SVC=$1
+                            if kubectl -n stage rollout status deployment/$SVC --timeout=900s 2>&1; then
+                                echo "  OK  $SVC"
+                                return 0
+                            fi
+                            echo "  FAIL $SVC — detalles:"
+                            STATUS=$(kubectl -n stage get pods -l app=$SVC --no-headers 2>/dev/null \
+                                | awk 'NR==1{print $3}')
+                            kubectl -n stage get pods -l app=$SVC -o wide 2>/dev/null || true
+                            case "$STATUS" in
+                                ImagePullBackOff|ErrImagePull|InvalidImageName)
+                                    echo "  → imagen :stage no existe. Corre el pipeline principal (DEPLOY_ENV=stage)."
+                                    ;;
+                                CrashLoopBackOff|Error|OOMKilled)
+                                    POD=$(kubectl -n stage get pods -l app=$SVC --no-headers 2>/dev/null \
+                                        | awk 'NR==1{print $1}')
+                                    echo "  → pod crashea ($STATUS). Logs:"
+                                    kubectl -n stage logs "$POD" --tail=40 2>/dev/null || true
+                                    ;;
+                                *)
+                                    echo "  → estado: $STATUS"
+                                    ;;
+                            esac
                             return 1
                         }
 
-                        # 90 intentos × 10s = 15 min máximo por servicio
+                        PIDS=""
+                        for svc in circleguard-auth-service circleguard-identity-service \
+                                   circleguard-gateway-service circleguard-dashboard-service \
+                                   circleguard-promotion-service circleguard-file-service; do
+                            rollout_wait $svc &
+                            PIDS="$PIDS $!"
+                        done
+
                         FAIL=0
-                        wait_pod circleguard-auth-service       90 || FAIL=1
-                        wait_pod circleguard-identity-service   90 || FAIL=1
-                        wait_pod circleguard-gateway-service    90 || FAIL=1
-                        wait_pod circleguard-dashboard-service  90 || FAIL=1
-                        wait_pod circleguard-promotion-service  90 || FAIL=1
-                        wait_pod circleguard-file-service       90 || FAIL=1
+                        for pid in $PIDS; do
+                            wait $pid || FAIL=1
+                        done
 
                         echo ""
-                        echo "=== Estado final pods ==="
+                        echo "=== Estado final ==="
                         kubectl get pods -n stage
 
-                        if [ "$FAIL" -ne 0 ]; then
-                            echo ""
-                            echo "ERROR: uno o más pods no arrancaron. Ver mensajes anteriores."
-                            exit 1
-                        fi
+                        [ "$FAIL" -ne 0 ] && { echo "ERROR: uno o más servicios no arrancaron."; exit 1; }
+                        echo "Todos los servicios listos."
                     '''
                 }
             }
@@ -198,22 +243,16 @@ pipeline {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
-                        echo "Cambiando servicios a LoadBalancer..."
-
-                        expose() {
-                            NS=$1; SVC=$2
-                            kubectl -n $NS patch svc $SVC -p '{"spec":{"type":"LoadBalancer"}}' \
-                                && echo "  OK  $NS/$SVC" || echo "  ERR $NS/$SVC"
-                        }
-
-                        expose stage circleguard-auth-service
-                        expose stage circleguard-identity-service
-                        expose stage circleguard-promotion-service
-                        expose stage circleguard-gateway-service
-                        expose stage circleguard-dashboard-service
-                        expose stage circleguard-file-service
-                        expose monitoring grafana
-                        expose monitoring prometheus
+                        for svc in circleguard-auth-service circleguard-identity-service \
+                                   circleguard-promotion-service circleguard-gateway-service \
+                                   circleguard-dashboard-service circleguard-file-service; do
+                            kubectl -n stage patch svc $svc -p '{"spec":{"type":"LoadBalancer"}}' \
+                                && echo "  OK  stage/$svc" || echo "  ERR stage/$svc"
+                        done
+                        for svc in grafana prometheus; do
+                            kubectl -n monitoring patch svc $svc -p '{"spec":{"type":"LoadBalancer"}}' \
+                                && echo "  OK  monitoring/$svc" || echo "  ERR monitoring/$svc"
+                        done
                     '''
                 }
             }
@@ -225,17 +264,12 @@ pipeline {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
-                        echo "Esperando que DO asigne IPs (2-4 min)..."
-
                         wait_ip() {
                             NS=$1; SVC=$2
                             for i in $(seq 1 24); do
                                 IP=$(kubectl -n $NS get svc $SVC \
                                     -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
-                                if [ -n "$IP" ]; then
-                                    echo "  $NS/$SVC → $IP"
-                                    return 0
-                                fi
+                                [ -n "$IP" ] && { echo "  $NS/$SVC → $IP"; return 0; }
                                 sleep 10
                             done
                             echo "  TIMEOUT $NS/$SVC"
@@ -272,14 +306,17 @@ pipeline {
 
                         echo ""
                         echo "========================================================"
-                        echo "  DEMO LISTA — URLs públicas (6 servicios + monitoreo)"
+                        echo "  DEMO LISTA — 6 servicios + monitoreo"
                         echo "========================================================"
-                        echo "  Auth       → http://${AUTH}:8080/api/v1/auth/login"
+                        echo "  Auth       → http://${AUTH}:8080/actuator/health"
+                        echo "  Auth login → http://${AUTH}:8080/api/v1/auth/login  (POST)"
                         echo "  Auth QR    → http://${AUTH}:8080/api/v1/auth/qr/generate"
                         echo "  Identity   → http://${IDNT}:8080/actuator/health"
-                        echo "  Promotion  → http://${PRMO}:8081/api/v1/buildings"
+                        echo "  Promotion  → http://${PRMO}:8081/actuator/health"
+                        echo "  Edificios  → http://${PRMO}:8081/api/v1/buildings"
                         echo "  Gateway    → http://${GTWY}:8080/actuator/health"
-                        echo "  Dashboard  → http://${DASH}:8080/api/v1/analytics/health-board"
+                        echo "  Dashboard  → http://${DASH}:8080/actuator/health"
+                        echo "  Analytics  → http://${DASH}:8080/api/v1/analytics/health-board"
                         echo "  File       → http://${FILE}:8080/actuator/health"
                         echo "  Grafana    → http://${GF}:3000  (admin/admin)"
                         echo "  Prometheus → http://${PROM}:9090"
@@ -290,7 +327,7 @@ pipeline {
             }
         }
 
-        // ── START: esperar y luego bajar automáticamente ───────────────────────
+        // ── START: teardown automático ─────────────────────────────────────────
         stage('START - Teardown automático') {
             when {
                 allOf {
@@ -301,15 +338,14 @@ pipeline {
             steps {
                 script {
                     def mins = (params.TEARDOWN_AFTER_MINUTES ?: '60').trim() as Integer
-                    echo "Demo activa. Pipeline esperará ${mins} minuto(s) y luego revertirá los servicios a ClusterIP."
-                    echo "Cierra este pipeline manualmente si quieres pararlo antes."
+                    echo "Demo activa. Pipeline esperará ${mins} min y revertirá a ClusterIP."
+                    echo "Cancela el pipeline manualmente para parar antes."
                     sleep(time: mins, unit: 'MINUTES')
-                    echo "Tiempo agotado (${mins} min). Revirtiendo servicios..."
                 }
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh 'scripts/ci/k8s-revert-clusterip.sh stage'
                 }
-                echo "Servicios revertidos a ClusterIP. Los pods siguen corriendo."
+                echo "Servicios revertidos. Pods siguen corriendo."
             }
         }
 
