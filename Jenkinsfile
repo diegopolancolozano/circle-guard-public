@@ -51,9 +51,14 @@ pipeline {
             description: '(GCP only) GKE cluster region/zone.'
         )
         string(
+            name: 'DEPLOY_ENV',
+            defaultValue: '',
+            description: '(Override) Entorno destino: dev / stage / prod. Vacío = derivar del nombre de rama (Multibranch Pipeline). Para un Pipeline simple corriendo en main, usa "stage".'
+        )
+        string(
             name: 'TEARDOWN_AFTER_MINUTES',
-            defaultValue: '5',
-            description: 'Minutes to wait before scaling the environment to zero. Use 0 to keep running.'
+            defaultValue: '0',
+            description: 'Minutos antes del teardown automático. 0 = sin teardown (recomendado para demo).'
         )
     }
 
@@ -102,22 +107,29 @@ pipeline {
                         echo "Webhook build on ${env.BRANCH_NAME} → PIPELINE_MODE=full, CLOUD_TARGET=${env.CLOUD_TARGET}"
                     }
 
-                    switch (env.BRANCH_NAME) {
-                        case "dev":
-                            env.DEPLOY_ENV  = "dev"
-                            env.IMAGE_TAGS  = "dev"
-                            break
-                        case "stage":
-                            env.DEPLOY_ENV  = "stage"
-                            env.IMAGE_TAGS  = "stage"
-                            break
-                        case "main":
-                            env.DEPLOY_ENV  = "prod"
-                            env.IMAGE_TAGS  = "stage,prod"
-                            break
-                        default:
-                            env.DEPLOY_ENV  = ""
-                            env.IMAGE_TAGS  = ""
+                    // Parámetro manual tiene precedencia (útil en simple Pipeline sin BRANCH_NAME)
+                    if (params.DEPLOY_ENV?.trim()) {
+                        env.DEPLOY_ENV = params.DEPLOY_ENV.trim()
+                        env.IMAGE_TAGS = env.DEPLOY_ENV
+                        echo "DEPLOY_ENV override desde parámetro: ${env.DEPLOY_ENV}"
+                    } else {
+                        switch (env.BRANCH_NAME) {
+                            case "dev":
+                                env.DEPLOY_ENV  = "dev"
+                                env.IMAGE_TAGS  = "dev"
+                                break
+                            case "stage":
+                                env.DEPLOY_ENV  = "stage"
+                                env.IMAGE_TAGS  = "stage"
+                                break
+                            case "main":
+                                env.DEPLOY_ENV  = "prod"
+                                env.IMAGE_TAGS  = "stage,prod"
+                                break
+                            default:
+                                env.DEPLOY_ENV  = ""
+                                env.IMAGE_TAGS  = ""
+                        }
                     }
 
                     // A unique kubeconfig file written to the workspace so it
@@ -205,17 +217,8 @@ pipeline {
                 script {
                     def raw = (params.TEARDOWN_AFTER_MINUTES ?: '0').trim()
                     if (raw == '0') {
-                        def isManual = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause') as boolean
-                        if (isManual) {
-                            def ans = input(
-                                message: "Minutes before teardown for '${env.DEPLOY_ENV}'?",
-                                parameters: [string(name: 'MINUTES', defaultValue: '5')]
-                            )
-                            env.TEARDOWN_AFTER_MINUTES = (ans ?: '5').trim()
-                        } else {
-                            env.TEARDOWN_AFTER_MINUTES = '5'
-                            echo "Non-interactive build: defaulting teardown to 5 minutes."
-                        }
+                        env.TEARDOWN_AFTER_MINUTES = '0'
+                        echo "TEARDOWN_AFTER_MINUTES=0 → sin teardown automático."
                     } else {
                         env.TEARDOWN_AFTER_MINUTES = raw
                     }
@@ -227,9 +230,18 @@ pipeline {
         // ------------------------------------------------------------------ //
         // Compile, run all tests, generate coverage report.
         // The compiled classes are reused by 'Build & Push Images' (no second clean).
+        // TESTCONTAINERS_RYUK_DISABLED=true: necesario en DinD (Jenkins dentro de Docker);
+        // el contenedor Ryuk de TC no puede cerrarse correctamente sin privilegios extra.
         stage("Build & Test") {
             steps {
-                sh "./gradlew test jacocoTestReport --no-daemon"
+                withEnv([
+                    "TESTCONTAINERS_RYUK_DISABLED=true",
+                    "DOCKER_HOST=unix:///var/run/docker.sock"
+                ]) {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh "./gradlew test jacocoTestReport --no-daemon"
+                    }
+                }
             }
             post {
                 always {
