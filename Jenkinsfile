@@ -57,8 +57,8 @@ pipeline {
         )
         string(
             name: 'TEARDOWN_AFTER_MINUTES',
-            defaultValue: '0',
-            description: 'Minutos antes del teardown automático. 0 = sin teardown (recomendado para demo).'
+            defaultValue: '60',
+            description: 'Minutos antes del teardown automático. 0 = sin teardown. Default: 60 (1 hora).'
         )
     }
 
@@ -453,6 +453,83 @@ pipeline {
         }
 
         // ------------------------------------------------------------------ //
+        // Expone todos los servicios como LoadBalancer y muestra las IPs públicas.
+        // Corre después de Deploy Monitoring para que Grafana/Prometheus estén listos.
+        stage("Expose URLs") {
+            when {
+                expression { return env.PIPELINE_MODE == 'full' && env.DEPLOY_ENV?.trim() }
+            }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG_PATH}"]) {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                        sh '''
+                            DEPLOY_NS="''' + env.DEPLOY_ENV + '''"
+                            [ "$DEPLOY_NS" = "prod" ] && DEPLOY_NS="stage"  # main branch deploys stage first
+
+                            echo "Exponiendo servicios como LoadBalancer en $DEPLOY_NS..."
+                            for svc in circleguard-auth-service circleguard-identity-service \
+                                       circleguard-promotion-service circleguard-gateway-service \
+                                       circleguard-dashboard-service circleguard-file-service; do
+                                kubectl -n $DEPLOY_NS patch svc $svc -p \'{"spec":{"type":"LoadBalancer"}}\' \
+                                    && echo "  OK  $svc" || echo "  SKIP $svc"
+                            done
+                            for svc in grafana prometheus; do
+                                kubectl -n monitoring patch svc $svc -p \'{"spec":{"type":"LoadBalancer"}}\' \
+                                    && echo "  OK  $svc" || echo "  SKIP $svc"
+                            done
+
+                            echo "Esperando IPs (máx 4 min)..."
+                            wait_ip() {
+                                NS=$1; SVC=$2
+                                for i in $(seq 1 24); do
+                                    IP=$(kubectl -n $NS get svc $SVC \
+                                        -o jsonpath=\'{.status.loadBalancer.ingress[0].ip}\' 2>/dev/null || true)
+                                    [ -n "$IP" ] && { echo "  $NS/$SVC → $IP"; return 0; }
+                                    sleep 10
+                                done
+                                echo "  TIMEOUT $NS/$SVC"
+                            }
+                            wait_ip $DEPLOY_NS circleguard-auth-service &
+                            wait_ip $DEPLOY_NS circleguard-identity-service &
+                            wait_ip $DEPLOY_NS circleguard-promotion-service &
+                            wait_ip $DEPLOY_NS circleguard-gateway-service &
+                            wait_ip $DEPLOY_NS circleguard-dashboard-service &
+                            wait_ip $DEPLOY_NS circleguard-file-service &
+                            wait_ip monitoring grafana &
+                            wait_ip monitoring prometheus &
+                            wait
+
+                            AUTH=$(kubectl -n $DEPLOY_NS get svc circleguard-auth-service     -o jsonpath=\'{.status.loadBalancer.ingress[0].ip}\' 2>/dev/null || true)
+                            IDNT=$(kubectl -n $DEPLOY_NS get svc circleguard-identity-service -o jsonpath=\'{.status.loadBalancer.ingress[0].ip}\' 2>/dev/null || true)
+                            PRMO=$(kubectl -n $DEPLOY_NS get svc circleguard-promotion-service -o jsonpath=\'{.status.loadBalancer.ingress[0].ip}\' 2>/dev/null || true)
+                            GTWY=$(kubectl -n $DEPLOY_NS get svc circleguard-gateway-service  -o jsonpath=\'{.status.loadBalancer.ingress[0].ip}\' 2>/dev/null || true)
+                            DASH=$(kubectl -n $DEPLOY_NS get svc circleguard-dashboard-service -o jsonpath=\'{.status.loadBalancer.ingress[0].ip}\' 2>/dev/null || true)
+                            FILE=$(kubectl -n $DEPLOY_NS get svc circleguard-file-service     -o jsonpath=\'{.status.loadBalancer.ingress[0].ip}\' 2>/dev/null || true)
+                            GF=$(kubectl -n monitoring  get svc grafana                        -o jsonpath=\'{.status.loadBalancer.ingress[0].ip}\' 2>/dev/null || true)
+                            PROM=$(kubectl -n monitoring get svc prometheus                    -o jsonpath=\'{.status.loadBalancer.ingress[0].ip}\' 2>/dev/null || true)
+
+                            echo ""
+                            echo "========================================================"
+                            echo "  SERVICIOS DESPLEGADOS [$DEPLOY_NS] — IPs PÚBLICAS"
+                            echo "========================================================"
+                            echo "  Auth       → http://${AUTH}:8080/api/v1/auth/login"
+                            echo "  Auth QR    → http://${AUTH}:8080/api/v1/auth/qr/generate"
+                            echo "  Identity   → http://${IDNT}:8080/actuator/health"
+                            echo "  Promotion  → http://${PRMO}:8081/api/v1/buildings"
+                            echo "  Gateway    → http://${GTWY}:8080/actuator/health"
+                            echo "  Dashboard  → http://${DASH}:8080/api/v1/analytics/health-board"
+                            echo "  File       → http://${FILE}:8080/actuator/health"
+                            echo "  Grafana    → http://${GF}:3000  (admin/admin)"
+                            echo "  Prometheus → http://${PROM}:9090"
+                            echo "  Jenkins    → http://104.248.109.57:8080"
+                            echo "========================================================"
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ //
         // Smoke tests: run inside the cluster (curl pod) — only on stage branch.
         stage("Smoke Tests") {
             when {
@@ -721,6 +798,7 @@ pipeline {
                             chmod 600 '${stableKubeconfig}'
                             nohup sh -c \
                               'sleep ${minutes}m \
+                               && KUBECONFIG=${stableKubeconfig} ${env.WORKSPACE}/scripts/ci/k8s-revert-clusterip.sh ${teardownEnv} \
                                && KUBECONFIG=${stableKubeconfig} ${env.WORKSPACE}/scripts/ci/k8s-teardown.sh ${teardownEnv} \
                                && rm -f ${stableKubeconfig}' \
                               > /tmp/teardown-${teardownEnv}-${env.BUILD_NUMBER}.log 2>&1 &
