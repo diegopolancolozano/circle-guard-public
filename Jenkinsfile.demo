@@ -1,19 +1,10 @@
 // =============================================================================
-// Jenkinsfile.demo — Levanta o baja el entorno de demo sin correr el pipeline
+// Jenkinsfile.demo — Sube/baja el entorno de demo exponiendo servicios como
+//                    LoadBalancer en DigitalOcean (IP pública real, sin tunnels)
 //
-// Acciones:
-//   START  → levanta port-forwards para acceso público a todos los servicios
-//   STOP   → mata todos los port-forwards
-//   STATUS → muestra el estado de pods y port-forwards
-//
-// URLs resultantes (START):
-//   http://104.248.109.57:8082  → Gateway  /actuator/health
-//   http://104.248.109.57:8083  → Dashboard
-//   http://104.248.109.57:8084  → Promotion / Edificios
-//   http://104.248.109.57:8085  → Auth / QR
-//   http://104.248.109.57:3000  → Grafana   (admin/admin)
-//   http://104.248.109.57:9090  → Prometheus
-//   http://104.248.109.57:8080  → Jenkins
+// START  → cambia servicios a LoadBalancer, espera IPs y las imprime
+// STOP   → revierte todo a ClusterIP
+// STATUS → muestra pods y las IPs públicas actuales
 // =============================================================================
 pipeline {
     agent any
@@ -22,18 +13,13 @@ pipeline {
         choice(
             name: 'ACTION',
             choices: ['START', 'STOP', 'STATUS'],
-            description: 'START: levanta todo | STOP: baja todo | STATUS: muestra estado'
-        )
-        string(
-            name: 'MINUTES',
-            defaultValue: '0',
-            description: 'Solo para START: minutos antes de bajar automáticamente. 0 = sin límite.'
+            description: 'START: expone servicios públicamente | STOP: revierte a ClusterIP | STATUS: estado actual'
         )
     }
 
     options {
         timestamps()
-        timeout(time: 10, unit: 'MINUTES')
+        timeout(time: 15, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
@@ -47,172 +33,157 @@ pipeline {
                         chmod 600 "${env.WORKSPACE}/.kubeconfig-demo"
                     """
                 }
-                script {
-                    env.KUBECONFIG = "${env.WORKSPACE}/.kubeconfig-demo"
-                }
+                script { env.KUBECONFIG = "${env.WORKSPACE}/.kubeconfig-demo" }
             }
         }
 
+        // ── STATUS ─────────────────────────────────────────────────────────────
         stage('STATUS') {
             when { expression { params.ACTION == 'STATUS' } }
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
-                sh '''
-                    echo "========================================"
-                    echo " PORT-FORWARDS ACTIVOS"
-                    echo "========================================"
-                    ps aux | grep "kubectl.*port-forward" | grep -v grep || echo "  Ninguno corriendo"
+                    sh '''
+                        echo "=== PODS STAGE ==="
+                        kubectl get pods -n stage
 
-                    echo ""
-                    echo "========================================"
-                    echo " PODS EN STAGE"
-                    echo "========================================"
-                    kubectl get pods -n stage
+                        echo ""
+                        echo "=== SERVICIOS PÚBLICOS ACTIVOS ==="
+                        kubectl get svc -n stage -o wide | grep -v ClusterIP || echo "  Ninguno"
+                        kubectl get svc -n monitoring -o wide | grep -v ClusterIP || echo "  Ninguno en monitoring"
 
-                    echo ""
-                    echo "========================================"
-                    echo " PODS EN MONITORING"
-                    echo "========================================"
-                    kubectl get pods -n monitoring | grep -E "NAME|grafana|prometheus|jaeger"
-                '''
-                } // withEnv
+                        echo ""
+                        echo "=== IPs EXTERNAS ==="
+                        for svc in circleguard-gateway-service circleguard-dashboard-service circleguard-promotion-service circleguard-auth-service; do
+                            IP=$(kubectl -n stage get svc $svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+                            TYPE=$(kubectl -n stage get svc $svc -o jsonpath='{.spec.type}' 2>/dev/null)
+                            echo "  $svc  [$TYPE]  ${IP:-sin IP pública}"
+                        done
+                        for svc in grafana prometheus; do
+                            IP=$(kubectl -n monitoring get svc $svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+                            TYPE=$(kubectl -n monitoring get svc $svc -o jsonpath='{.spec.type}' 2>/dev/null)
+                            echo "  $svc  [$TYPE]  ${IP:-sin IP pública}"
+                        done
+                    '''
+                }
             }
         }
 
+        // ── STOP ───────────────────────────────────────────────────────────────
         stage('STOP') {
             when { expression { params.ACTION == 'STOP' } }
             steps {
-                sh '''
-                    echo "Matando port-forwards..."
-                    pkill -f "kubectl.*port-forward" 2>/dev/null && echo "Detenidos." || echo "No habia procesos activos."
-                    sleep 1
-                    echo "Port-forwards activos ahora:"
-                    ps aux | grep "kubectl.*port-forward" | grep -v grep || echo "  Ninguno."
-                '''
-            }
-        }
-
-        stage('START - Limpiar anteriores') {
-            when { expression { params.ACTION == 'START' } }
-            steps {
-                sh 'pkill -f "kubectl.*port-forward" 2>/dev/null || true; sleep 2'
-            }
-        }
-
-        stage('START - Verificar pods') {
-            when { expression { params.ACTION == 'START' } }
-            steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
-                sh '''
-                    echo "=== Pods en stage ==="
-                    kubectl get pods -n stage
-                    NOT_RUNNING=$(kubectl get pods -n stage --no-headers | grep -v Running | grep -v Completed | wc -l)
-                    if [ "$NOT_RUNNING" -gt 0 ]; then
-                        echo "ADVERTENCIA: $NOT_RUNNING pod(s) no están en Running."
-                        echo "Espera unos segundos e intenta de nuevo si falla."
-                    else
-                        echo "Todos los pods Running."
-                    fi
-                '''
-                } // withEnv
-            }
-        }
+                    sh '''
+                        echo "Revirtiendo servicios a ClusterIP..."
 
-        stage('START - Port-forwards') {
-            when { expression { params.ACTION == 'START' } }
-            steps {
-                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
-                sh '''
-                    nohup kubectl -n stage port-forward --address 0.0.0.0 \
-                        svc/circleguard-gateway-service 8082:8080 > /tmp/pf-gw.log 2>&1 &
+                        patch_clusterip() {
+                            NS=$1; SVC=$2; PORT=$3
+                            kubectl -n $NS patch svc $SVC \
+                                -p "{\"spec\":{\"type\":\"ClusterIP\",\"ports\":[{\"port\":${PORT},\"targetPort\":${PORT},\"protocol\":\"TCP\"}]}}" \
+                                2>/dev/null && echo "  OK  $NS/$SVC → ClusterIP" || echo "  SKIP $NS/$SVC"
+                        }
 
-                    nohup kubectl -n stage port-forward --address 0.0.0.0 \
-                        svc/circleguard-dashboard-service 8083:8080 > /tmp/pf-dash.log 2>&1 &
+                        patch_clusterip stage circleguard-gateway-service 8080
+                        patch_clusterip stage circleguard-dashboard-service 8080
+                        patch_clusterip stage circleguard-promotion-service 8081
+                        patch_clusterip stage circleguard-auth-service 8080
+                        patch_clusterip monitoring grafana 3000
+                        patch_clusterip monitoring prometheus 9090
 
-                    nohup kubectl -n stage port-forward --address 0.0.0.0 \
-                        svc/circleguard-promotion-service 8084:8081 > /tmp/pf-promo.log 2>&1 &
-
-                    nohup kubectl -n stage port-forward --address 0.0.0.0 \
-                        svc/circleguard-auth-service 8085:8080 > /tmp/pf-auth.log 2>&1 &
-
-                    nohup kubectl -n monitoring port-forward --address 0.0.0.0 \
-                        svc/grafana 3000:3000 > /tmp/pf-grafana.log 2>&1 &
-
-                    nohup kubectl -n monitoring port-forward --address 0.0.0.0 \
-                        svc/prometheus 9090:9090 > /tmp/pf-prom.log 2>&1 &
-
-                    sleep 5
-                '''
-                } // withEnv
-            }
-        }
-
-        stage('START - Verificar acceso') {
-            when { expression { params.ACTION == 'START' } }
-            steps {
-                sh '''
-                    echo "========================================"
-                    echo " VERIFICANDO ENDPOINTS"
-                    echo "========================================"
-                    check() {
-                        SVC_PORT=$1; SVC_NAME=$2; SVC_PATH=$3
-                        SVC_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${SVC_PORT}${SVC_PATH}" 2>/dev/null)
-                        if [ "$SVC_CODE" = "200" ] || [ "$SVC_CODE" = "302" ]; then
-                            echo "  OK  :${SVC_PORT}${SVC_PATH}  (${SVC_NAME})"
-                        else
-                            echo "  ERR :${SVC_PORT}${SVC_PATH}  (${SVC_NAME}) -> HTTP $SVC_CODE"
-                        fi
-                    }
-                    check 8082 "Gateway"    /actuator/health
-                    check 8083 "Dashboard"  /actuator/health
-                    check 8084 "Promotion"  /actuator/health
-                    check 8085 "Auth"       /actuator/health
-                    check 3000 "Grafana"    /
-                    check 9090 "Prometheus" /
-
-                    echo ""
-                    echo "========================================"
-                    echo " URLS PUBLICAS"
-                    echo "========================================"
-                    echo "  Gateway    → http://104.248.109.57:8082/actuator/health"
-                    echo "  Dashboard  → http://104.248.109.57:8083/api/v1/analytics/health-board"
-                    echo "  Edificios  → http://104.248.109.57:8084/api/v1/buildings"
-                    echo "  Auth QR    → http://104.248.109.57:8085/api/v1/auth/qr/generate"
-                    echo "  Grafana    → http://104.248.109.57:3000  (admin/admin)"
-                    echo "  Prometheus → http://104.248.109.57:9090"
-                    echo "  Jenkins    → http://104.248.109.57:8080"
-                    echo "========================================"
-                '''
-            }
-        }
-
-        stage('START - Teardown programado') {
-            when {
-                allOf {
-                    expression { params.ACTION == 'START' }
-                    expression { (params.MINUTES as Integer) > 0 }
-                }
-            }
-            steps {
-                script {
-                    def minutes = params.MINUTES as Integer
-                    sh """
-                        nohup sh -c 'sleep ${minutes}m && pkill -f "kubectl.*port-forward" 2>/dev/null && echo "Demo terminada." >> /tmp/demo-teardown.log' \
-                            > /tmp/demo-teardown.log 2>&1 &
-                        echo "Teardown programado en ${minutes} minutos (PID \$!)."
-                    """
+                        echo ""
+                        echo "Todos los servicios revertidos a ClusterIP."
+                    '''
                 }
             }
         }
-    }
 
-    post {
-        success {
-            script {
-                if (params.ACTION == 'START') {
-                    echo "Demo lista. Abre las URLs arriba en tu navegador."
-                } else if (params.ACTION == 'STOP') {
-                    echo "Demo detenida."
+        // ── START: exponer servicios ───────────────────────────────────────────
+        stage('START - Exponer como LoadBalancer') {
+            when { expression { params.ACTION == 'START' } }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
+                    sh '''
+                        echo "Cambiando servicios a LoadBalancer..."
+
+                        expose() {
+                            NS=$1; SVC=$2
+                            kubectl -n $NS patch svc $SVC -p '{"spec":{"type":"LoadBalancer"}}' \
+                                && echo "  OK  $NS/$SVC" || echo "  ERR $NS/$SVC"
+                        }
+
+                        expose stage circleguard-gateway-service
+                        expose stage circleguard-dashboard-service
+                        expose stage circleguard-promotion-service
+                        expose stage circleguard-auth-service
+                        expose monitoring grafana
+                        expose monitoring prometheus
+                    '''
+                }
+            }
+        }
+
+        // ── START: esperar IPs ─────────────────────────────────────────────────
+        stage('START - Esperar IPs públicas') {
+            when { expression { params.ACTION == 'START' } }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
+                    sh '''
+                        echo "Esperando que DO asigne IPs (puede tardar 2-4 min)..."
+
+                        wait_ip() {
+                            NS=$1; SVC=$2
+                            for i in $(seq 1 24); do
+                                IP=$(kubectl -n $NS get svc $SVC \
+                                    -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+                                if [ -n "$IP" ]; then
+                                    echo "  $NS/$SVC → $IP"
+                                    return 0
+                                fi
+                                sleep 10
+                            done
+                            echo "  TIMEOUT $NS/$SVC (sin IP tras 4 min)"
+                        }
+
+                        wait_ip stage circleguard-gateway-service
+                        wait_ip stage circleguard-dashboard-service
+                        wait_ip stage circleguard-promotion-service
+                        wait_ip stage circleguard-auth-service
+                        wait_ip monitoring grafana
+                        wait_ip monitoring prometheus
+                    '''
+                }
+            }
+        }
+
+        // ── START: imprimir URLs ───────────────────────────────────────────────
+        stage('START - URLs públicas') {
+            when { expression { params.ACTION == 'START' } }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
+                    sh '''
+                        echo ""
+                        echo "========================================================"
+                        echo "  DEMO LISTA — URLs públicas"
+                        echo "========================================================"
+
+                        GW=$(kubectl -n stage get svc circleguard-gateway-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                        DASH=$(kubectl -n stage get svc circleguard-dashboard-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                        PROMO=$(kubectl -n stage get svc circleguard-promotion-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                        AUTH=$(kubectl -n stage get svc circleguard-auth-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                        GF=$(kubectl -n monitoring get svc grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                        PROM=$(kubectl -n monitoring get svc prometheus -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+                        echo "  Gateway    → http://${GW}:8080/actuator/health"
+                        echo "  Dashboard  → http://${DASH}:8080/api/v1/analytics/health-board"
+                        echo "  Edificios  → http://${PROMO}:8081/api/v1/buildings"
+                        echo "  Auth QR    → http://${AUTH}:8080/api/v1/auth/qr/generate"
+                        echo "  Grafana    → http://${GF}:3000  (admin/admin)"
+                        echo "  Prometheus → http://${PROM}:9090"
+                        echo "  Jenkins    → http://104.248.109.57:8080"
+                        echo "========================================================"
+                        echo "  Para cerrar: corre este pipeline con ACTION=STOP"
+                        echo "========================================================"
+                    '''
                 }
             }
         }
