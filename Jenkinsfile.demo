@@ -1,10 +1,13 @@
 // =============================================================================
-// Jenkinsfile.demo — Sube/baja el entorno de demo exponiendo servicios como
-//                    LoadBalancer en DigitalOcean (IP pública real, sin tunnels)
+// Jenkinsfile.demo — Levanta / baja el entorno de demo en DigitalOcean DOKS
 //
-// START  → cambia servicios a LoadBalancer, espera IPs y las imprime
-// STOP   → revierte todo a ClusterIP
-// STATUS → muestra pods y las IPs públicas actuales
+// START  → aplica manifiestos k8s, espera pods Ready, expone como LoadBalancer
+// STOP   → revierte servicios a ClusterIP (pods siguen corriendo para próxima vez)
+// STATUS → muestra pods y URLs públicas actuales
+//
+// Prerrequisito: las imágenes diegoapolancol/circleguard-*:stage deben existir
+// en Docker Hub. Si no existen, corre el pipeline principal con DEPLOY_ENV=stage
+// una vez, luego vuelve a correr este pipeline.
 // =============================================================================
 pipeline {
     agent any
@@ -13,18 +16,19 @@ pipeline {
         choice(
             name: 'ACTION',
             choices: ['START', 'STOP', 'STATUS'],
-            description: 'START: expone servicios públicamente | STOP: revierte a ClusterIP | STATUS: estado actual'
+            description: 'START: despliega y expone públicamente | STOP: revierte a ClusterIP | STATUS: estado actual'
         )
     }
 
     options {
         timestamps()
-        timeout(time: 15, unit: 'MINUTES')
+        timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
     stages {
 
+        // ── KUBECONFIG ─────────────────────────────────────────────────────────
         stage('Setup KUBECONFIG') {
             steps {
                 withCredentials([file(credentialsId: 'kubeconfig-do-credentials', variable: 'KUBE_FILE')]) {
@@ -44,23 +48,27 @@ pipeline {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
                         echo "=== PODS STAGE ==="
-                        kubectl get pods -n stage
+                        kubectl get pods -n stage -o wide
 
                         echo ""
-                        echo "=== SERVICIOS PÚBLICOS ACTIVOS ==="
-                        kubectl get svc -n stage -o wide | grep -v ClusterIP || echo "  Ninguno"
-                        kubectl get svc -n monitoring -o wide | grep -v ClusterIP || echo "  Ninguno en monitoring"
+                        echo "=== PODS MONITORING ==="
+                        kubectl get pods -n monitoring -o wide
 
                         echo ""
-                        echo "=== IPs EXTERNAS ==="
+                        echo "=== SERVICIOS PÚBLICOS (LoadBalancer) ==="
+                        kubectl get svc -n stage    | grep -v "^NAME" || true
+                        kubectl get svc -n monitoring | grep -v "^NAME" || true
+
+                        echo ""
+                        echo "=== IPs EXTERNAS ASIGNADAS ==="
                         for svc in circleguard-gateway-service circleguard-dashboard-service circleguard-promotion-service circleguard-auth-service; do
-                            IP=$(kubectl -n stage get svc $svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
-                            TYPE=$(kubectl -n stage get svc $svc -o jsonpath='{.spec.type}' 2>/dev/null)
+                            IP=$(kubectl -n stage get svc $svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+                            TYPE=$(kubectl -n stage get svc $svc -o jsonpath='{.spec.type}' 2>/dev/null || true)
                             echo "  $svc  [$TYPE]  ${IP:-sin IP pública}"
                         done
                         for svc in grafana prometheus; do
-                            IP=$(kubectl -n monitoring get svc $svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
-                            TYPE=$(kubectl -n monitoring get svc $svc -o jsonpath='{.spec.type}' 2>/dev/null)
+                            IP=$(kubectl -n monitoring get svc $svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+                            TYPE=$(kubectl -n monitoring get svc $svc -o jsonpath='{.spec.type}' 2>/dev/null || true)
                             echo "  $svc  [$TYPE]  ${IP:-sin IP pública}"
                         done
                     '''
@@ -74,13 +82,13 @@ pipeline {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
-                        echo "Revirtiendo servicios a ClusterIP..."
+                        echo "Revirtiendo servicios a ClusterIP (pods siguen corriendo)..."
 
                         patch_clusterip() {
                             NS=$1; SVC=$2; PORT=$3
                             kubectl -n $NS patch svc $SVC \
                                 -p "{\"spec\":{\"type\":\"ClusterIP\",\"ports\":[{\"port\":${PORT},\"targetPort\":${PORT},\"protocol\":\"TCP\"}]}}" \
-                                2>/dev/null && echo "  OK  $NS/$SVC → ClusterIP" || echo "  SKIP $NS/$SVC"
+                                2>/dev/null && echo "  OK  $NS/$SVC → ClusterIP:${PORT}" || echo "  SKIP $NS/$SVC"
                         }
 
                         patch_clusterip stage circleguard-gateway-service 8080
@@ -91,7 +99,91 @@ pipeline {
                         patch_clusterip monitoring prometheus 9090
 
                         echo ""
-                        echo "Todos los servicios revertidos a ClusterIP."
+                        echo "Servicios revertidos. Los pods siguen corriendo — próximo START será más rápido."
+                    '''
+                }
+            }
+        }
+
+        // ── START: aplicar manifiestos ─────────────────────────────────────────
+        stage('START - Aplicar manifiestos k8s') {
+            when { expression { params.ACTION == 'START' } }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
+                    sh '''
+                        echo "Asegurando namespace stage..."
+                        kubectl apply -f k8s/namespaces.yaml --validate=false
+
+                        echo ""
+                        echo "Aplicando overlay stage (deployments, secrets, services)..."
+                        kubectl apply -k k8s/overlays/stage --validate=false
+
+                        echo ""
+                        echo "Eliminando pods en Error/CrashLoop para que se reinicien limpio..."
+                        kubectl -n stage get pods --no-headers 2>/dev/null \
+                          | awk '$3=="Error"||$3=="CrashLoopBackOff"||$3=="OOMKilled"{print $1}' \
+                          | xargs -r kubectl -n stage delete pod --grace-period=0 --force --ignore-not-found 2>/dev/null || true
+
+                        echo ""
+                        echo "Estado inicial de pods:"
+                        kubectl get pods -n stage
+                    '''
+                }
+            }
+        }
+
+        // ── START: esperar pods ────────────────────────────────────────────────
+        stage('START - Esperar pods Ready') {
+            when { expression { params.ACTION == 'START' } }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
+                    sh '''
+                        echo "Esperando que los pods de app estén Running (máx 15 min)..."
+                        echo "Si algún pod queda en ImagePullBackOff, primero corre el pipeline"
+                        echo "principal con DEPLOY_ENV=stage para construir las imágenes :stage."
+                        echo ""
+
+                        wait_pod() {
+                            APP=$1; MAX_ATTEMPTS=$2
+                            for i in $(seq 1 $MAX_ATTEMPTS); do
+                                STATUS=$(kubectl -n stage get pods -l app=$APP --no-headers 2>/dev/null \
+                                    | awk '{print $3}' | head -1)
+                                READY=$(kubectl -n stage get pods -l app=$APP --no-headers 2>/dev/null \
+                                    | awk '{print $2}' | head -1)
+                                if [ "$STATUS" = "Running" ] && [ "$READY" = "1/1" ]; then
+                                    echo "  OK  $APP ($STATUS $READY)"
+                                    return 0
+                                fi
+                                if [ "$STATUS" = "ImagePullBackOff" ] || [ "$STATUS" = "ErrImagePull" ]; then
+                                    echo "  FAIL $APP: $STATUS — imagen :stage no existe en Docker Hub"
+                                    echo "         Corre el pipeline principal (DEPLOY_ENV=stage) para construir las imágenes."
+                                    return 1
+                                fi
+                                echo "  ... $APP [$STATUS $READY] (intento $i/$MAX_ATTEMPTS)"
+                                sleep 10
+                            done
+                            echo "  TIMEOUT $APP — no Ready tras $(( MAX_ATTEMPTS * 10 ))s"
+                            kubectl -n stage describe pods -l app=$APP | tail -20 || true
+                            return 1
+                        }
+
+                        # 90 intentos × 10s = 15 minutos máx por servicio
+                        FAIL=0
+                        wait_pod circleguard-auth-service 90      || FAIL=1
+                        wait_pod circleguard-identity-service 90  || FAIL=1
+                        wait_pod circleguard-gateway-service 90   || FAIL=1
+                        wait_pod circleguard-dashboard-service 90 || FAIL=1
+                        wait_pod circleguard-promotion-service 90 || FAIL=1
+
+                        echo ""
+                        echo "=== Estado final pods ==="
+                        kubectl get pods -n stage
+
+                        if [ "$FAIL" -ne 0 ]; then
+                            echo ""
+                            echo "ERROR: uno o más pods no arrancaron. Ver mensajes anteriores."
+                            exit 1
+                        fi
                     '''
                 }
             }
@@ -134,7 +226,7 @@ pipeline {
                             NS=$1; SVC=$2
                             for i in $(seq 1 24); do
                                 IP=$(kubectl -n $NS get svc $SVC \
-                                    -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+                                    -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
                                 if [ -n "$IP" ]; then
                                     echo "  $NS/$SVC → $IP"
                                     return 0
@@ -161,22 +253,23 @@ pipeline {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
+                        GW=$(kubectl -n stage get svc circleguard-gateway-service   -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+                        DASH=$(kubectl -n stage get svc circleguard-dashboard-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+                        PROMO=$(kubectl -n stage get svc circleguard-promotion-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+                        AUTH=$(kubectl -n stage get svc circleguard-auth-service    -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+                        GF=$(kubectl -n monitoring get svc grafana                  -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+                        PROM=$(kubectl -n monitoring get svc prometheus              -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
                         echo ""
                         echo "========================================================"
                         echo "  DEMO LISTA — URLs públicas"
                         echo "========================================================"
-
-                        GW=$(kubectl -n stage get svc circleguard-gateway-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-                        DASH=$(kubectl -n stage get svc circleguard-dashboard-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-                        PROMO=$(kubectl -n stage get svc circleguard-promotion-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-                        AUTH=$(kubectl -n stage get svc circleguard-auth-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-                        GF=$(kubectl -n monitoring get svc grafana -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-                        PROM=$(kubectl -n monitoring get svc prometheus -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-
                         echo "  Gateway    → http://${GW}:8080/actuator/health"
+                        echo "  Gateway    → http://${GW}:8080/api/v1/gate/validate"
+                        echo "  Auth       → http://${AUTH}:8080/api/v1/auth/login"
+                        echo "  Auth QR    → http://${AUTH}:8080/api/v1/auth/qr/generate"
                         echo "  Dashboard  → http://${DASH}:8080/api/v1/analytics/health-board"
                         echo "  Edificios  → http://${PROMO}:8081/api/v1/buildings"
-                        echo "  Auth QR    → http://${AUTH}:8080/api/v1/auth/qr/generate"
                         echo "  Grafana    → http://${GF}:3000  (admin/admin)"
                         echo "  Prometheus → http://${PROM}:9090"
                         echo "  Jenkins    → http://104.248.109.57:8080"
