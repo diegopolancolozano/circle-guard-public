@@ -88,6 +88,28 @@ spec:
     - {}  # permit all outbound from CI test pods
 
 ---
+# Ingress: allow external HTTP traffic on the service ports.
+# Required for DigitalOcean LoadBalancer health checks (REGIONAL_NETWORK type routes
+# directly to pod IPs; without this rule the LB marks all backends as unhealthy and
+# drops all external traffic — even though the pods are Running 1/1).
+# Without this, default-deny-ingress blocks the LB health probes → 100% timeout.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-loadbalancer-ingress
+spec:
+  podSelector:
+    matchLabels: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+
+---
 # Egress: allow all outbound from circleguard services (DB, Kafka, LDAP, identity-service, etc.)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
