@@ -590,7 +590,8 @@ pipeline {
                 }
             }
             steps {
-                input message: "Deploy version ${env.RELEASE_VERSION ?: 'unknown'} to PRODUCTION?"
+                input message: "Deploy version ${env.RELEASE_VERSION ?: 'unknown'} to PRODUCTION?",
+                      submitter: 'admin,jenkins'
             }
         }
 

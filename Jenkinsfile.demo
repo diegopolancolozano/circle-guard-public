@@ -1,0 +1,200 @@
+// =============================================================================
+// Jenkinsfile.demo — Levanta o baja el entorno de demo sin correr el pipeline
+//
+// Acciones:
+//   START  → levanta port-forwards para acceso público a todos los servicios
+//   STOP   → mata todos los port-forwards
+//   STATUS → muestra el estado de pods y port-forwards
+//
+// URLs resultantes (START):
+//   http://104.248.109.57:8082  → Gateway  /actuator/health
+//   http://104.248.109.57:8083  → Dashboard
+//   http://104.248.109.57:8084  → Promotion / Edificios
+//   http://104.248.109.57:8085  → Auth / QR
+//   http://104.248.109.57:3000  → Grafana   (admin/admin)
+//   http://104.248.109.57:9090  → Prometheus
+//   http://104.248.109.57:8080  → Jenkins
+// =============================================================================
+pipeline {
+    agent any
+
+    parameters {
+        choice(
+            name: 'ACTION',
+            choices: ['START', 'STOP', 'STATUS'],
+            description: 'START: levanta todo | STOP: baja todo | STATUS: muestra estado'
+        )
+        string(
+            name: 'MINUTES',
+            defaultValue: '0',
+            description: 'Solo para START: minutos antes de bajar automáticamente. 0 = sin límite.'
+        )
+    }
+
+    options {
+        timestamps()
+        timeout(time: 10, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    stages {
+
+        stage('STATUS') {
+            when { expression { params.ACTION == 'STATUS' } }
+            steps {
+                sh '''
+                    echo "========================================"
+                    echo " PORT-FORWARDS ACTIVOS"
+                    echo "========================================"
+                    ps aux | grep "kubectl.*port-forward" | grep -v grep || echo "  Ninguno corriendo"
+
+                    echo ""
+                    echo "========================================"
+                    echo " PODS EN STAGE"
+                    echo "========================================"
+                    kubectl get pods -n stage
+
+                    echo ""
+                    echo "========================================"
+                    echo " PODS EN MONITORING"
+                    echo "========================================"
+                    kubectl get pods -n monitoring | grep -E "NAME|grafana|prometheus|jaeger"
+                '''
+            }
+        }
+
+        stage('STOP') {
+            when { expression { params.ACTION == 'STOP' } }
+            steps {
+                sh '''
+                    echo "Matando port-forwards..."
+                    pkill -f "kubectl.*port-forward" 2>/dev/null && echo "Detenidos." || echo "No habia procesos activos."
+                    sleep 1
+                    echo "Port-forwards activos ahora:"
+                    ps aux | grep "kubectl.*port-forward" | grep -v grep || echo "  Ninguno."
+                '''
+            }
+        }
+
+        stage('START - Limpiar anteriores') {
+            when { expression { params.ACTION == 'START' } }
+            steps {
+                sh 'pkill -f "kubectl.*port-forward" 2>/dev/null || true; sleep 2'
+            }
+        }
+
+        stage('START - Verificar pods') {
+            when { expression { params.ACTION == 'START' } }
+            steps {
+                sh '''
+                    echo "=== Pods en stage ==="
+                    kubectl get pods -n stage
+                    NOT_RUNNING=$(kubectl get pods -n stage --no-headers | grep -v Running | grep -v Completed | wc -l)
+                    if [ "$NOT_RUNNING" -gt 0 ]; then
+                        echo "ADVERTENCIA: $NOT_RUNNING pod(s) no están en Running."
+                        echo "Espera unos segundos e intenta de nuevo si falla."
+                    else
+                        echo "Todos los pods Running."
+                    fi
+                '''
+            }
+        }
+
+        stage('START - Port-forwards') {
+            when { expression { params.ACTION == 'START' } }
+            steps {
+                sh '''
+                    nohup kubectl -n stage port-forward --address 0.0.0.0 \
+                        svc/circleguard-gateway-service 8082:8080 > /tmp/pf-gw.log 2>&1 &
+
+                    nohup kubectl -n stage port-forward --address 0.0.0.0 \
+                        svc/circleguard-dashboard-service 8083:8080 > /tmp/pf-dash.log 2>&1 &
+
+                    nohup kubectl -n stage port-forward --address 0.0.0.0 \
+                        svc/circleguard-promotion-service 8084:8081 > /tmp/pf-promo.log 2>&1 &
+
+                    nohup kubectl -n stage port-forward --address 0.0.0.0 \
+                        svc/circleguard-auth-service 8085:8080 > /tmp/pf-auth.log 2>&1 &
+
+                    nohup kubectl -n monitoring port-forward --address 0.0.0.0 \
+                        svc/grafana 3000:3000 > /tmp/pf-grafana.log 2>&1 &
+
+                    nohup kubectl -n monitoring port-forward --address 0.0.0.0 \
+                        svc/prometheus 9090:9090 > /tmp/pf-prom.log 2>&1 &
+
+                    sleep 5
+                '''
+            }
+        }
+
+        stage('START - Verificar acceso') {
+            when { expression { params.ACTION == 'START' } }
+            steps {
+                sh '''
+                    echo "========================================"
+                    echo " VERIFICANDO ENDPOINTS"
+                    echo "========================================"
+                    check() {
+                        PORT=$1; NAME=$2; PATH=$3
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}${PATH} 2>/dev/null)
+                        if [ "$CODE" = "200" ] || [ "$CODE" = "302" ]; then
+                            echo "  OK  :${PORT}${PATH}  (${NAME})"
+                        else
+                            echo "  ERR :${PORT}${PATH}  (${NAME}) → HTTP $CODE"
+                        fi
+                    }
+                    check 8082 "Gateway"    /actuator/health
+                    check 8083 "Dashboard"  /actuator/health
+                    check 8084 "Promotion"  /actuator/health
+                    check 8085 "Auth"       /actuator/health
+                    check 3000 "Grafana"    /
+                    check 9090 "Prometheus" /
+
+                    echo ""
+                    echo "========================================"
+                    echo " URLS PUBLICAS"
+                    echo "========================================"
+                    echo "  Gateway    → http://104.248.109.57:8082/actuator/health"
+                    echo "  Dashboard  → http://104.248.109.57:8083/api/v1/analytics/health-board"
+                    echo "  Edificios  → http://104.248.109.57:8084/api/v1/buildings"
+                    echo "  Auth QR    → http://104.248.109.57:8085/api/v1/auth/qr/generate"
+                    echo "  Grafana    → http://104.248.109.57:3000  (admin/admin)"
+                    echo "  Prometheus → http://104.248.109.57:9090"
+                    echo "  Jenkins    → http://104.248.109.57:8080"
+                    echo "========================================"
+                '''
+            }
+        }
+
+        stage('START - Teardown programado') {
+            when {
+                allOf {
+                    expression { params.ACTION == 'START' }
+                    expression { (params.MINUTES as Integer) > 0 }
+                }
+            }
+            steps {
+                script {
+                    def minutes = params.MINUTES as Integer
+                    sh """
+                        nohup sh -c 'sleep ${minutes}m && pkill -f "kubectl.*port-forward" 2>/dev/null && echo "Demo terminada." >> /tmp/demo-teardown.log' \
+                            > /tmp/demo-teardown.log 2>&1 &
+                        echo "Teardown programado en ${minutes} minutos (PID \$!)."
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                if (params.ACTION == 'START') {
+                    echo "Demo lista. Abre las URLs arriba en tu navegador."
+                } else if (params.ACTION == 'STOP') {
+                    echo "Demo detenida."
+                }
+            }
+        }
+    }
+}
