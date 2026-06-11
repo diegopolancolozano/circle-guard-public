@@ -155,12 +155,12 @@ pipeline {
                     echo " VERIFICANDO ENDPOINTS"
                     echo "========================================"
                     check() {
-                        PORT=$1; NAME=$2; PATH=$3
-                        CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}${PATH} 2>/dev/null)
-                        if [ "$CODE" = "200" ] || [ "$CODE" = "302" ]; then
-                            echo "  OK  :${PORT}${PATH}  (${NAME})"
+                        SVC_PORT=$1; SVC_NAME=$2; SVC_PATH=$3
+                        SVC_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${SVC_PORT}${SVC_PATH}" 2>/dev/null)
+                        if [ "$SVC_CODE" = "200" ] || [ "$SVC_CODE" = "302" ]; then
+                            echo "  OK  :${SVC_PORT}${SVC_PATH}  (${SVC_NAME})"
                         else
-                            echo "  ERR :${PORT}${PATH}  (${NAME}) → HTTP $CODE"
+                            echo "  ERR :${SVC_PORT}${SVC_PATH}  (${SVC_NAME}) -> HTTP $SVC_CODE"
                         fi
                     }
                     check 8082 "Gateway"    /actuator/health
