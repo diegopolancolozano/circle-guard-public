@@ -243,15 +243,27 @@ pipeline {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
+                        # Limpia anotaciones obsoletas de DO antes de parchear.
+                        # Ciclos anteriores ClusterIP↔LB pueden dejar IDs de LBs ya
+                        # eliminados; el webhook de DO rechaza cualquier cambio con 404.
+                        clean_and_expose() {
+                            NS=$1; SVC=$2
+                            kubectl -n "$NS" annotate svc "$SVC" \
+                                "kubernetes.digitalocean.com/load-balancer-id-" \
+                                "service.beta.kubernetes.io/do-loadbalancer-type-" \
+                                --overwrite 2>/dev/null || true
+                            kubectl -n "$NS" patch svc "$SVC" \
+                                -p '{"spec":{"type":"LoadBalancer"}}' \
+                                && echo "  OK  $NS/$SVC" || echo "  ERR $NS/$SVC"
+                        }
+
                         for svc in circleguard-auth-service circleguard-identity-service \
                                    circleguard-promotion-service circleguard-gateway-service \
                                    circleguard-dashboard-service circleguard-file-service; do
-                            kubectl -n stage patch svc $svc -p '{"spec":{"type":"LoadBalancer"}}' \
-                                && echo "  OK  stage/$svc" || echo "  ERR stage/$svc"
+                            clean_and_expose stage $svc
                         done
                         for svc in grafana prometheus; do
-                            kubectl -n monitoring patch svc $svc -p '{"spec":{"type":"LoadBalancer"}}' \
-                                && echo "  OK  monitoring/$svc" || echo "  ERR monitoring/$svc"
+                            clean_and_expose monitoring $svc
                         done
                     '''
                 }
@@ -304,22 +316,32 @@ pipeline {
                         GF=$(kubectl   -n monitoring get svc grafana                  -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
                         PROM=$(kubectl -n monitoring get svc prometheus               -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
 
+                        # Si el LB no tiene IP aún, muestra "(sin IP)" en lugar de URL rota
+                        url_or_pending() {
+                            local IP=$1 PORT=$2 PATH_=$3
+                            if [ -n "$IP" ]; then
+                                echo "http://${IP}:${PORT}${PATH_}"
+                            else
+                                echo "(sin IP — LB pendiente)"
+                            fi
+                        }
+
                         echo ""
                         echo "========================================================"
                         echo "  DEMO LISTA — 6 servicios + monitoreo"
                         echo "========================================================"
-                        echo "  Auth       → http://${AUTH}:8080/actuator/health"
-                        echo "  Auth login → http://${AUTH}:8080/api/v1/auth/login  (POST)"
-                        echo "  Auth QR    → http://${AUTH}:8080/api/v1/auth/qr/generate"
-                        echo "  Identity   → http://${IDNT}:8080/actuator/health"
-                        echo "  Promotion  → http://${PRMO}:8081/actuator/health"
-                        echo "  Edificios  → http://${PRMO}:8081/api/v1/buildings"
-                        echo "  Gateway    → http://${GTWY}:8080/actuator/health"
-                        echo "  Dashboard  → http://${DASH}:8080/actuator/health"
-                        echo "  Analytics  → http://${DASH}:8080/api/v1/analytics/health-board"
-                        echo "  File       → http://${FILE}:8080/actuator/health"
-                        echo "  Grafana    → http://${GF}:3000  (admin/admin)"
-                        echo "  Prometheus → http://${PROM}:9090"
+                        echo "  Auth       → $(url_or_pending "$AUTH" 8080 /actuator/health)"
+                        echo "  Auth login → $(url_or_pending "$AUTH" 8080 /api/v1/auth/login)  (POST)"
+                        echo "  Auth QR    → $(url_or_pending "$AUTH" 8080 /api/v1/auth/qr/generate)"
+                        echo "  Identity   → $(url_or_pending "$IDNT" 8080 /actuator/health)"
+                        echo "  Promotion  → $(url_or_pending "$PRMO" 8081 /actuator/health)"
+                        echo "  Edificios  → $(url_or_pending "$PRMO" 8081 /api/v1/buildings)"
+                        echo "  Gateway    → $(url_or_pending "$GTWY" 8080 /actuator/health)"
+                        echo "  Dashboard  → $(url_or_pending "$DASH" 8080 /actuator/health)"
+                        echo "  Analytics  → $(url_or_pending "$DASH" 8080 /api/v1/analytics/health-board)"
+                        echo "  File       → $(url_or_pending "$FILE" 8080 /actuator/health)"
+                        echo "  Grafana    → $(url_or_pending "$GF"   3000 /)  (admin/circleguard)"
+                        echo "  Prometheus → $(url_or_pending "$PROM" 9090 /)"
                         echo "  Jenkins    → http://104.248.109.57:8080"
                         echo "========================================================"
                     '''
