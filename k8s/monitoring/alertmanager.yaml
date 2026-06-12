@@ -24,9 +24,10 @@ data:
           receiver: 'webhook'
 
     receivers:
+      - name: 'null'
       - name: 'webhook'
         webhook_configs:
-          - url: '${PIPELINE_WEBHOOK_URL:-http://localhost/noop}'
+          - url: 'http://alertmanager-sink:9999/noop'
             send_resolved: true
             http_config:
               follow_redirects: true

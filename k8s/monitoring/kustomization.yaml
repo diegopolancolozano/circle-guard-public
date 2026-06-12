@@ -7,3 +7,4 @@ resources:
   - jaeger.yaml
   - loki.yaml
   - elk.yaml
+  - kube-state-metrics.yaml

@@ -13,6 +13,9 @@ data:
     server:
       http_listen_port: 3100
     ingester:
+      wal:
+        enabled: false
+        dir: /loki/wal
       lifecycler:
         address: 127.0.0.1
         ring:
@@ -85,7 +88,6 @@ data:
               expressions:
                 level: level
                 message: message
-                timestamp: "@timestamp"
           - labels:
               level:
 
