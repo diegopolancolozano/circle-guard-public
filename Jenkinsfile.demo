@@ -1,10 +1,11 @@
 // =============================================================================
 // Jenkinsfile.demo — Levanta / baja el entorno de demo en DigitalOcean DOKS
 //
-// START  → verifica imágenes, despliega, espera rollout completo, expone 6
-//          servicios como LoadBalancer, imprime URLs, espera N minutos y revierte
-// STOP   → revierte servicios a ClusterIP (pods siguen corriendo)
-// STATUS → muestra pods, servicios y URLs públicas actuales
+// START    → verifica imágenes, despliega, espera rollout, expone como LB,
+//            imprime URLs. Los LBs (y sus IPs) se mantienen entre ciclos.
+// STOP     → escala pods a 0 (LBs siguen activos → próximo START es inmediato).
+// TEARDOWN → revierte servicios a ClusterIP (elimina LBs en DO, limpieza total).
+// STATUS   → muestra pods, servicios y URLs públicas actuales.
 //
 // PRERREQUISITO: imágenes diegoapolancol/circleguard-*:stage en Docker Hub.
 // Si no existen: corre el pipeline principal (DEPLOY_ENV=stage) primero.
@@ -15,8 +16,8 @@ pipeline {
     parameters {
         choice(
             name: 'ACTION',
-            choices: ['START', 'STOP', 'STATUS'],
-            description: 'START: despliega y expone | STOP: revierte a ClusterIP | STATUS: estado actual'
+            choices: ['START', 'STOP', 'TEARDOWN', 'STATUS'],
+            description: 'START: despliega y expone | STOP: pausa pods (LBs intactos) | TEARDOWN: elimina LBs (ClusterIP) | STATUS: estado actual'
         )
         string(
             name: 'TEARDOWN_AFTER_MINUTES',
@@ -94,14 +95,48 @@ pipeline {
             }
         }
 
-        // ── STOP ───────────────────────────────────────────────────────────────
+        // ── STOP — escala pods a 0, mantiene LBs con sus IPs ──────────────────
+        // Los LoadBalancers de DO no se destruyen; próximo START es inmediato.
+        // Para eliminar los LBs completamente, usar ACTION=TEARDOWN.
         stage('STOP') {
             when { expression { params.ACTION == 'STOP' } }
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
+                        echo "=== Pausando servicios (pods → 0, LBs intactos) ==="
+
+                        # Suspende HPAs para que no peleen con replicas=0
+                        for hpa in $(kubectl -n stage get hpa -o name 2>/dev/null); do
+                            kubectl -n stage patch "$hpa" \
+                                --subresource=scale \
+                                -p "{}" 2>/dev/null || true
+                        done
+                        kubectl -n stage delete hpa --all 2>/dev/null || true
+                        echo "  HPAs eliminados (se recrean en START)"
+
+                        for svc in circleguard-auth-service circleguard-identity-service \
+                                   circleguard-promotion-service circleguard-gateway-service \
+                                   circleguard-dashboard-service circleguard-file-service; do
+                            kubectl -n stage scale deployment/$svc --replicas=0 \
+                                && echo "  PAUSED stage/$svc" || echo "  ERR $svc"
+                        done
+                        echo ""
+                        echo "Pods apagados. Los LoadBalancers siguen activos con sus IPs."
+                        echo "Próximo START escalará los pods de vuelta — sin espera de nuevos LBs."
+                        echo "Para liberar LBs completamente: usa ACTION=TEARDOWN."
+                    '''
+                }
+            }
+        }
+
+        // ── TEARDOWN — revierte servicios a ClusterIP, elimina LBs en DO ──────
+        stage('TEARDOWN') {
+            when { expression { params.ACTION == 'TEARDOWN' } }
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
+                    sh '''
                         scripts/ci/k8s-revert-clusterip.sh stage
-                        echo "Listo. Pods siguen activos — próximo START será más rápido."
+                        echo "LoadBalancers eliminados. DO tardará ~1 min en limpiar."
                     '''
                 }
             }
@@ -151,6 +186,19 @@ pipeline {
 
                         echo "Aplicando overlay stage..."
                         kubectl apply -k k8s/overlays/stage --validate=false
+
+                        # Si los pods fueron pausados (replicas=0 por STOP), asegurar que
+                        # vuelvan al mínimo. El apply ya setea replicas=1 desde el manifest,
+                        # pero un scale explícito garantiza el arranque inmediato.
+                        for svc in circleguard-auth-service circleguard-identity-service \
+                                   circleguard-promotion-service circleguard-gateway-service \
+                                   circleguard-dashboard-service circleguard-file-service; do
+                            CURR=$(kubectl -n stage get deployment/$svc \
+                                -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+                            [ "$CURR" = "0" ] && \
+                                kubectl -n stage scale deployment/$svc --replicas=1 && \
+                                echo "  scaled up stage/$svc" || true
+                        done
 
                         echo "Limpiando pods en Error/CrashLoop..."
                         kubectl -n stage get pods --no-headers 2>/dev/null \
@@ -243,11 +291,19 @@ pipeline {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
                     sh '''
-                        # Limpia anotaciones obsoletas de DO antes de parchear.
-                        # Ciclos anteriores ClusterIP↔LB pueden dejar IDs de LBs ya
-                        # eliminados; el webhook de DO rechaza cualquier cambio con 404.
+                        # Expone el servicio como LoadBalancer.
+                        # Si YA es LoadBalancer: salta (no tocar la anotación load-balancer-id
+                        # evita que DO descarte el LB existente y cree uno nuevo).
+                        # Si era ClusterIP: limpia anotaciones obsoletas (IDs de LBs eliminados
+                        # que harían fallar el webhook DO con 404) y cambia el tipo.
                         clean_and_expose() {
                             NS=$1; SVC=$2
+                            CURRENT=$(kubectl -n "$NS" get svc "$SVC" \
+                                -o jsonpath='{.spec.type}' 2>/dev/null || echo "")
+                            if [ "$CURRENT" = "LoadBalancer" ]; then
+                                echo "  SKIP $NS/$SVC (ya es LoadBalancer — IP intacta)"
+                                return 0
+                            fi
                             kubectl -n "$NS" annotate svc "$SVC" \
                                 "kubernetes.digitalocean.com/load-balancer-id-" \
                                 "service.beta.kubernetes.io/do-loadbalancer-type-" \
@@ -278,13 +334,14 @@ pipeline {
                     sh '''
                         wait_ip() {
                             NS=$1; SVC=$2
-                            for i in $(seq 1 24); do
+                            # 72 × 10s = 12 min — suficiente para LBs nuevos en DO (5-10 min)
+                            for i in $(seq 1 72); do
                                 IP=$(kubectl -n $NS get svc $SVC \
                                     -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
                                 [ -n "$IP" ] && { echo "  $NS/$SVC → $IP"; return 0; }
                                 sleep 10
                             done
-                            echo "  TIMEOUT $NS/$SVC"
+                            echo "  TIMEOUT $NS/$SVC (>12 min — revisar DO panel)"
                         }
 
                         wait_ip stage circleguard-auth-service      &
@@ -349,8 +406,10 @@ pipeline {
             }
         }
 
-        // ── START: teardown automático ─────────────────────────────────────────
-        stage('START - Teardown automático') {
+        // ── START: pausa automática ────────────────────────────────────────────
+        // Escala pods a 0 tras N minutos — los LBs quedan activos (mismo IP).
+        // Para destruir LBs completamente usa ACTION=TEARDOWN.
+        stage('START - Pausa automática') {
             when {
                 allOf {
                     expression { params.ACTION == 'START' }
@@ -360,14 +419,20 @@ pipeline {
             steps {
                 script {
                     def mins = (params.TEARDOWN_AFTER_MINUTES ?: '60').trim() as Integer
-                    echo "Demo activa. Pipeline esperará ${mins} min y revertirá a ClusterIP."
+                    echo "Demo activa. Pipeline pausará pods en ${mins} min (LBs intactos)."
                     echo "Cancela el pipeline manualmente para parar antes."
                     sleep(time: mins, unit: 'MINUTES')
                 }
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
-                    sh 'scripts/ci/k8s-revert-clusterip.sh stage'
+                    sh '''
+                        for svc in circleguard-auth-service circleguard-identity-service \
+                                   circleguard-promotion-service circleguard-gateway-service \
+                                   circleguard-dashboard-service circleguard-file-service; do
+                            kubectl -n stage scale deployment/$svc --replicas=0 || true
+                        done
+                        echo "Pods pausados. LBs activos. Usa ACTION=TEARDOWN para limpieza total."
+                    '''
                 }
-                echo "Servicios revertidos. Pods siguen corriendo."
             }
         }
 
