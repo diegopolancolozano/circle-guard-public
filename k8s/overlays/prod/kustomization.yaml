@@ -18,3 +18,7 @@ images:
     newTag: prod
   - name: diegoapolancol/circleguard-file-service
     newTag: prod
+  - name: diegoapolancol/circleguard-form-service
+    newTag: prod
+  - name: diegoapolancol/circleguard-notification-service
+    newTag: prod

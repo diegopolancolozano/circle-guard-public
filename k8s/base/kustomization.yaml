@@ -1,5 +1,6 @@
 resources:
   - services-deployments.yaml
+  - extra-services-deployments.yaml
   - infra-deployments.yaml
   - app-config-secret.yaml
   - qr-secret.yaml
@@ -31,4 +32,10 @@ images:
     newTag: dev
   - name: diegoapolancol/circleguard-file-service
     newName: diegoapolancol/circleguard-file-service
+    newTag: dev
+  - name: diegoapolancol/circleguard-form-service
+    newName: diegoapolancol/circleguard-form-service
+    newTag: dev
+  - name: diegoapolancol/circleguard-notification-service
+    newName: diegoapolancol/circleguard-notification-service
     newTag: dev
