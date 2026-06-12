@@ -19,6 +19,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(EndpointRequest.to(HealthEndpoint.class)).permitAll()
+                .requestMatchers("/actuator/prometheus", "/actuator/metrics", "/actuator/info").permitAll()
                 .requestMatchers("/api/v1/identities/map").permitAll()
                 .anyRequest().authenticated()
             )
