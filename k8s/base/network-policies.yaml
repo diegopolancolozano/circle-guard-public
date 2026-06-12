@@ -127,6 +127,8 @@ spec:
           - circleguard-gateway-service
           - circleguard-dashboard-service
           - circleguard-file-service
+          - circleguard-form-service
+          - circleguard-notification-service
   policyTypes:
     - Egress
   egress:

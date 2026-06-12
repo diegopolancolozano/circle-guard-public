@@ -19,3 +19,7 @@ images:
     newTag: stage
   - name: diegoapolancol/circleguard-file-service
     newTag: stage
+  - name: diegoapolancol/circleguard-form-service
+    newTag: stage
+  - name: diegoapolancol/circleguard-notification-service
+    newTag: stage

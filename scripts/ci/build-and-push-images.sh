@@ -30,6 +30,8 @@ SERVICES=(
   "circleguard-gateway-service"
   "circleguard-dashboard-service"
   "circleguard-file-service"
+  "circleguard-form-service"
+  "circleguard-notification-service"
 )
 
 echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
@@ -44,6 +46,8 @@ echo "=== Building bootJars (reusing test-stage compilation) ==="
   :services:circleguard-gateway-service:bootJar \
   :services:circleguard-dashboard-service:bootJar \
   :services:circleguard-file-service:bootJar \
+  :services:circleguard-form-service:bootJar \
+  :services:circleguard-notification-service:bootJar \
   -x test --no-daemon --parallel
 
 echo "=== Building and pushing Docker images ==="
