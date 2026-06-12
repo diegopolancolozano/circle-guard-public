@@ -1,0 +1,32 @@
+# TLS gestionado por cert-manager.
+# ClusterIssuer self-signed + Certificate para el gateway.
+# Demuestra la gestión automática de certificados TLS X.509 vía cert-manager.
+# (Para un certificado de confianza pública, usar los ClusterIssuer de Let's Encrypt
+#  de cluster-issuer.yaml, que requieren un dominio registrado apuntando al LoadBalancer.)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: circleguard-gateway-cert
+  namespace: prod
+spec:
+  secretName: circleguard-gateway-tls
+  duration: 2160h      # 90 días
+  renewBefore: 360h    # renovar 15 días antes
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  commonName: circleguard-gateway.circleguard.app
+  dnsNames:
+    - circleguard-gateway.circleguard.app
+    - gateway.circleguard.app
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
