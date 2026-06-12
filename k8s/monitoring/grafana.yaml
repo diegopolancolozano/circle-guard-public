@@ -195,7 +195,7 @@ data:
         {
           "id": 4,
           "type": "stat",
-          "title": "Latencia p95 (ms)",
+          "title": "Latencia Promedio (ms)",
           "gridPos": {
             "h": 4,
             "w": 4,
@@ -237,8 +237,8 @@ data:
           },
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"circleguard-services\",namespace=\"stage\"}[2m])) by (le)) * 1000",
-              "legendFormat": "p95"
+              "expr": "sum(rate(http_server_requests_seconds_sum{job=\"circleguard-services\",namespace=\"stage\"}[2m])) / sum(rate(http_server_requests_seconds_count{job=\"circleguard-services\",namespace=\"stage\"}[2m])) * 1000",
+              "legendFormat": "avg ms"
             }
           ]
         },
@@ -441,7 +441,7 @@ data:
         {
           "id": 9,
           "type": "timeseries",
-          "title": "HTTP p95 Latencia por Servicio (ms)",
+          "title": "HTTP Latencia Promedio por Servicio (ms)",
           "gridPos": {
             "h": 8,
             "w": 12,
@@ -465,7 +465,7 @@ data:
           },
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"circleguard-services\",namespace=\"stage\"}[2m])) by (le, service)) * 1000",
+              "expr": "sum(rate(http_server_requests_seconds_sum{job=\"circleguard-services\",namespace=\"stage\"}[2m])) by (service) / sum(rate(http_server_requests_seconds_count{job=\"circleguard-services\",namespace=\"stage\"}[2m])) by (service) * 1000",
               "legendFormat": "{{service}}"
             }
           ]
@@ -633,7 +633,7 @@ data:
         {
           "id": 15,
           "type": "timeseries",
-          "title": "Circuit Breaker State (0=CLOSED  1=OPEN  2=HALF_OPEN)",
+          "title": "Peak Response Time por Servicio (ms) — máximo en ventana",
           "gridPos": {
             "h": 8,
             "w": 24,
@@ -648,7 +648,7 @@ data:
           },
           "fieldConfig": {
             "defaults": {
-              "unit": "short",
+              "unit": "ms",
               "custom": {
                 "lineWidth": 2
               }
@@ -656,8 +656,8 @@ data:
           },
           "targets": [
             {
-              "expr": "resilience4j_circuitbreaker_state{job=\"circleguard-services\",namespace=\"stage\"}",
-              "legendFormat": "{{name}} -- {{pod}}"
+              "expr": "http_server_requests_seconds_max{job=\"circleguard-services\",namespace=\"stage\"} * 1000",
+              "legendFormat": "{{uri}} — {{service}}"
             }
           ]
         }

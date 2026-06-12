@@ -27,7 +27,7 @@ data:
           "title": "Total CPU Requested (cores)",
           "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
           "targets": [{
-            "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\", namespace=~\"dev|stage|prod\"}) / 1000",
+            "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\", namespace=~\"dev|stage|prod\"})",
             "legendFormat": "CPU cores"
           }],
           "options": {"colorMode": "background", "graphMode": "none"}
@@ -66,7 +66,7 @@ data:
               "legendFormat": "used: {{container}}"
             },
             {
-              "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\", namespace=~\"dev|stage|prod\"}) by (container) / 1000",
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\", namespace=~\"dev|stage|prod\"}) by (container)",
               "legendFormat": "requested: {{container}}"
             }
           ]
@@ -93,7 +93,7 @@ data:
           "title": "CPU Efficiency (used/requested) — lower waste = greener",
           "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
           "targets": [{
-            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"dev|stage|prod\",container!=\"\"}[5m])) by (container) / sum(kube_pod_container_resource_requests{resource=\"cpu\",namespace=~\"dev|stage|prod\"}) by (container) * 1000",
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"dev|stage|prod\",container!=\"\"}[5m])) by (container) / sum(kube_pod_container_resource_requests{resource=\"cpu\",namespace=~\"dev|stage|prod\"}) by (container)",
             "legendFormat": "{{container}}"
           }],
           "options": {"orientation": "horizontal", "displayMode": "gradient"}
@@ -104,7 +104,7 @@ data:
           "title": "Idle/Oversized Pods (CPU request > 2× actual use)",
           "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
           "targets": [{
-            "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\",namespace=~\"dev|stage|prod\"}) by (container) / 1000 - sum(rate(container_cpu_usage_seconds_total{namespace=~\"dev|stage|prod\",container!=\"\"}[5m])) by (container) > 0.05",
+            "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\",namespace=~\"dev|stage|prod\"}) by (container) - sum(rate(container_cpu_usage_seconds_total{namespace=~\"dev|stage|prod\",container!=\"\"}[5m])) by (container) > 0.05",
             "legendFormat": "{{container}}"
           }],
           "transformations": [{"id": "sortBy", "options": {"fields": [{"displayName": "Value", "desc": true}]}}]
