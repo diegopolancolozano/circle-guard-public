@@ -43,6 +43,78 @@ graph TB
     DO_NS --> D_SVCS --> D_INFRA
 ```
 
+### 1.1 Diagrama detallado (por microservicio)
+
+Vista granular del cluster primario (GKE): cada uno de los 8 microservicios como nodo
+independiente, sus dependencias de datos reales, el service mesh Istio (mTLS), el stack
+de observabilidad y cert-manager. DOKS (respaldo) se muestra compacto al ser un espejo.
+
+```mermaid
+graph TB
+    DEV["Desarrollador<br/>git push"] --> GH["GitHub<br/>circle-guard-public"]
+    GH -->|webhook| JEN
+    subgraph DO_CI["DigitalOcean — CI/CD"]
+        JEN["Jenkins droplet<br/>104.248.109.57:8080"]
+    end
+    JEN -->|build + push| DH["Docker Hub<br/>diegoapolancol/circleguard-*"]
+
+    subgraph GCP["GCP — PRIMARIO · GKE circleguard-stage · us-central1 · 3x e2-standard-2"]
+      direction TB
+      subgraph MESH["Service Mesh Istio (mTLS STRICT · sidecar Envoy 2/2) — ns prod"]
+        GW["gateway :8080"]
+        AUTH["auth :8080"]
+        IDN["identity :8080"]
+        PROM["promotion :8081"]
+        DASH["dashboard :8080"]
+        FILE["file :8080"]
+        FORM["form :8080"]
+        NOTIF["notification :8082"]
+      end
+      subgraph INFRA_G["Infraestructura"]
+        PG["PostgreSQL 16"]
+        NEO["Neo4j 5.26"]
+        RED["Redis 7.2"]
+        KAF["Kafka 7.6"]
+        LDAP["OpenLDAP 1.5"]
+      end
+      subgraph OBS["Observabilidad — ns monitoring"]
+        PROMTH["Prometheus"]
+        GRAF["Grafana"]
+        JAEG["Jaeger"]
+        KIB["Kibana/ELK"]
+        KIALI["Kiali"]
+      end
+      CM["cert-manager (TLS)"]
+    end
+
+    subgraph DO["DigitalOcean — RESPALDO · DOKS circleguard-cluster · nyc1"]
+      DSVCS["CircleGuard — mismos 8 microservicios<br/>(ns stage)"]
+      DINFRA["Infra: PostgreSQL · Neo4j · Redis · Kafka · OpenLDAP"]
+    end
+    GCS["GCS Bucket<br/>circleguard-tfstate"]
+
+    JEN -->|"SA JSON (ensure-gke-access)"| GW
+    JEN -->|"kubeconfig (CLOUD_TARGET=multi)"| DSVCS
+    DH -.imagePull.-> GW
+    DH -.imagePull.-> DSVCS
+
+    GW --> RED
+    AUTH --> LDAP
+    AUTH --> PG
+    AUTH --> IDN
+    IDN --> PG
+    PROM --> NEO
+    PROM --> RED
+    PROM --> KAF
+    KAF --> NOTIF
+    FORM --> PG
+    DASH --> PG
+    DASH --> NEO
+    PROMTH -. scrape .-> AUTH
+    KIALI --> PROMTH
+    DSVCS --> DINFRA
+```
+
 ### 1.2 Detalle multi-cloud
 
 | Rol | Proveedor | Cluster | Región | Nodos |
